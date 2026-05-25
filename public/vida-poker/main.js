@@ -414,9 +414,9 @@ function showHandBadge(handKey, rarity, color) {
   badge.style.borderColor=color+'88';
   badge.style.background=color+'18';
   badge.style.opacity='1';
-  badge.style.transform='translateY(0) scale(1)';
+  badge.style.transform='translate(-50%,-50%) scale(1)';
   badge.style.transition='opacity 0.3s, transform 0.3s';
-  setTimeout(()=>{ badge.style.opacity='0'; badge.style.transform='translateY(-16px) scale(0.9)'; }, 750);
+  setTimeout(()=>{ badge.style.opacity='0'; badge.style.transform='translate(-50%,calc(-50% - 16px)) scale(0.9)'; }, 750);
 }
 
 // ─────────────────────────────────────────────
@@ -910,7 +910,22 @@ function createLbRow(entry, i) {
   return row;
 }
 
-function showTitle() { G = null; showScreen('titleScreen'); applyLang(); }
+function showTitle() {
+  // Full state reset to prevent stale game UI leaking
+  G = null;
+  isAnimating = false;
+  scoreSubmitted = false;
+  // Hide any open modals
+  document.getElementById('shopModal')?.classList.add('hidden');
+  document.getElementById('cardTargetModal')?.classList.add('hidden');
+  // Clear floating displays
+  const mbw = document.getElementById('multBreakdownWrap');
+  if (mbw) mbw.innerHTML = '';
+  const mtd = document.getElementById('multTotalDisplay');
+  if (mtd) mtd.classList.remove('visible');
+  showScreen('titleScreen');
+  applyLang();
+}
 
 // ─────────────────────────────────────────────
 // LANGUAGE

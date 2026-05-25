@@ -124,3 +124,23 @@ Stage Summary:
 - Leaderboard is round-based with difficulty tab sections
 - API supports ?difficulty= filter and round DESC sorting
 - PostgreSQL packages installed, ready for production migration
+
+---
+Task ID: 6
+Agent: main
+Task: Fix remaining centering bugs, game-over navigation, and provide Oracle Cloud deployment guide
+
+Work Log:
+- Fixed handBadge (ONEPAIR popup) centering: showHandBadge() was overwriting transform with translateY(0) scale(1), losing the translate(-50%,-50%) centering. Changed to translate(-50%,-50%) scale(1) and translate(-50%,calc(-50% - 16px)) scale(0.9) for fade-out
+- Fixed leaderboard box centering: added padding:1rem to #leaderboardScreen and margin:auto to inner div
+- Fixed game-over → menu navigation: showTitle() now fully resets state (G=null, isAnimating=false, scoreSubmitted=false), hides open modals, and clears floating displays
+- Simplified db.ts back to clean PrismaClient (removed adapter-pg complexity — standard PostgreSQL provider works natively)
+- Updated prisma/schema.prisma with clear comments showing SQLite (dev) vs PostgreSQL (production) provider switching
+- All lint passes, dev server running correctly
+
+Stage Summary:
+- Hand badge popup now properly centered on screen during hand reveal animation
+- Leaderboard box properly centered both horizontally and vertically
+- Game over → title navigation fully resets state, no stale betting screen
+- Prisma schema ready for SQLite→PostgreSQL switch with clear instructions
+- Oracle Cloud deployment guide provided

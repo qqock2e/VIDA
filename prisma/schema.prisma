@@ -5,10 +5,21 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🔧 LOCAL DEVELOPMENT (SQLite) — Default
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🚀 PRODUCTION (PostgreSQL) — Deploy 시 아래로 교체
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// datasource db {
+//   provider = "postgresql"
+//   url      = env("DATABASE_URL")
+// }
 
 model LeaderboardEntry {
   id         String   @id @default(cuid())
