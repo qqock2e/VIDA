@@ -46,3 +46,55 @@ Stage Summary:
 - No result modal; multiplier breakdown shown as floating animation
 - Screen shake on settle/fold
 - All changes deployed and linting passes
+
+---
+Task ID: 3
+Agent: leaderboard-api-agent
+Task: Create leaderboard database model and API routes
+
+Work Log:
+- Updated prisma/schema.prisma: removed default User and Post models, added LeaderboardEntry model (id, nickname, points, round, difficulty, createdAt)
+- Ran `bun run db:push` — schema synced successfully, Prisma Client regenerated
+- Created /src/app/api/leaderboard/route.ts with:
+  - POST handler: validates nickname, points, round, difficulty; creates LeaderboardEntry; returns 201 with created entry
+  - GET handler: returns top 10 entries sorted by points desc then round desc
+- Tested both endpoints with curl — POST returns created entry, GET returns sorted array
+- Lint passes cleanly
+
+Stage Summary:
+- LeaderboardEntry model available in DB
+- POST /api/leaderboard and GET /api/leaderboard endpoints working
+
+---
+Task ID: 4
+Agent: main
+Task: Fix bet return calculation, mobile responsiveness, leaderboard UI, deployment guide
+
+Work Log:
+- Fixed bet return calculation in game.js placeBet():
+  - Old: G.life += (betHeld + profit - roundCost) → returned bet + profit (double counting)
+  - New: G.life += (winnings - roundCost) → only returns bet*mult as winnings
+  - Formula: -bet (deducted at preBet) + bet*mult (winnings) - roundCost = net
+  - At 1.5x with bet 10: -10 + 15 = +5 profit (correct)
+- Updated main.js showMultiplierBreakdown(): replaced "Bet returned" line with "Winnings" line
+- Updated main.js renderHandResult(): shows "−bet (베팅) + winnings (획득) − drain (차감)"
+- Enhanced mobile responsiveness in index.html CSS:
+  - Smaller cards (54x78px), smaller fonts, tighter padding
+  - Cards row centered, bet buttons smaller
+  - Game over panel and leaderboard screen responsive
+  - Multiplier display smaller on mobile
+- Added leaderboard screen to index.html with lb-row CSS styling
+- Added game-over nickname input section with submit button
+- Added 🏆 LEADERBOARD button on title screen
+- Added submitScore() function in main.js: POST to /api/leaderboard
+- Added showLeaderboardScreen() function: GET from /api/leaderboard, render top 10
+- Added scoreSubmitted flag to prevent double submission
+- Added I18N strings for game-over and leaderboard (en/ko)
+- All lint passes, dev server running correctly
+
+Stage Summary:
+- Bet return formula fixed: -bet + bet*mult - roundCost
+- Mobile responsive UI with proper breakpoints
+- Leaderboard screen with top 10 display (gold/silver/bronze icons)
+- Game over with nickname input → score submission to API
+- Title screen has leaderboard button

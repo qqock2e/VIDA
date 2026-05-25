@@ -52,6 +52,10 @@ const UI_STRINGS = {
     item_next:(r)=>`Next item: Round ${r}`,
     go_title:'GAME OVER', go_sub:'Life depleted',
     go_final_round:'Final Round', go_points:'Total Points', btn_home:'Back to Title',
+    go_nickname_label:'Enter your nickname',
+    go_submit:'Register', go_submit_success:'Score registered!', go_submit_error:'Registration failed',
+    go_already_submitted:'Already registered',
+    lb_title:'🏆 LEADERBOARD', lb_subtitle:'Top 10 Players', lb_empty:'No records yet', lb_back:'← Back to Title',
     notif_ace_max:'Cannot rank up an Ace!',
     notif_rank_min:'Already at minimum rank!',
     notif_need_two:'Need two hand cards!',
@@ -110,6 +114,10 @@ const UI_STRINGS = {
     item_next:(r)=>`다음 아이템: ${r}라운드`,
     go_title:'GAME OVER', go_sub:'생명이 다했습니다',
     go_final_round:'최종 라운드', go_points:'획득 포인트', btn_home:'처음으로',
+    go_nickname_label:'닉네임을 입력하세요',
+    go_submit:'등록', go_submit_success:'점수가 등록되었습니다!', go_submit_error:'등록에 실패했습니다',
+    go_already_submitted:'이미 등록되었습니다',
+    lb_title:'🏆 리더보드', lb_subtitle:'Top 10 플레이어', lb_empty:'기록이 없습니다', lb_back:'← 처음으로',
     notif_ace_max:'에이스는 올릴 수 없습니다!',
     notif_rank_min:'이미 최저 랭크입니다!',
     notif_need_two:'패 카드가 2장 필요합니다!',
@@ -140,6 +148,7 @@ let lang = 'en';
 let selectedDifficulty = 'normal';
 let pendingItemAction  = null;
 let isAnimating = false;
+let scoreSubmitted = false;
 
 function t(key,...args) {
   const s=UI_STRINGS[lang]?.[key]??UI_STRINGS.en[key]??key;
@@ -459,13 +468,13 @@ function showMultiplierBreakdown(result, onDone) {
     delay += BASE_DELAY;
   });
 
-  // Show "Bet returned" line
-  if (result.betReturned > 0) {
+  // Show "Winnings" line (bet * mult)
+  if (result.lifeGain > 0) {
     setTimeout(()=>{
       const line = document.createElement('div');
       line.className = 'mult-line suit';
       line.style.color = '#6eff90';
-      line.textContent = `+${result.betReturned.toFixed(1)}♥ (베팅 반환)`;
+      line.textContent = `+${result.lifeGain.toFixed(1)}♥ (${lang==='ko'?'획득':'Winnings'})`;
       wrap.appendChild(line);
       sfx('mult');
     }, delay);
@@ -767,14 +776,98 @@ function handleItemResult(res,def) {
 // GAME OVER
 // ─────────────────────────────────────────────
 function showGameOver() {
+  scoreSubmitted = false;
   document.getElementById('goTitle').textContent      =t('go_title');
   document.getElementById('goSub').textContent        =t('go_sub');
   document.getElementById('goFinalRoundLabel').textContent=t('go_final_round');
   document.getElementById('goPointsLabel').textContent    =t('go_points');
   document.getElementById('finalRound').textContent   =G.round;
   document.getElementById('finalPoints').textContent  =G.totalPoints;
+  document.getElementById('goNicknameLabel').textContent=t('go_nickname_label');
+  document.getElementById('btnSubmitScore').textContent=t('go_submit');
+  document.getElementById('goNicknameInput').value='';
+  document.getElementById('goSubmitStatus').textContent='';
+  document.getElementById('goNicknameSection').style.display='block';
+  document.getElementById('btnSubmitScore').disabled=false;
   document.getElementById('btnHome').textContent      =t('btn_home');
   showScreen('gameOverScreen');
+}
+
+async function submitScore() {
+  if (scoreSubmitted || !G) return;
+  const nickname = document.getElementById('goNicknameInput').value.trim();
+  if (!nickname) {
+    document.getElementById('goSubmitStatus').textContent = lang==='ko'?'닉네임을 입력해주세요':'Please enter a nickname';
+    document.getElementById('goSubmitStatus').style.color = 'var(--red)';
+    return;
+  }
+  const btn = document.getElementById('btnSubmitScore');
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  try {
+    const res = await fetch('/api/leaderboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nickname,
+        points: G.totalPoints,
+        round: G.round,
+        difficulty: G.settings.difficulty,
+      }),
+    });
+    if (res.ok) {
+      scoreSubmitted = true;
+      document.getElementById('goSubmitStatus').textContent = t('go_submit_success');
+      document.getElementById('goSubmitStatus').style.color = 'var(--green)';
+      btn.textContent = '✓';
+      sfx('total');
+    } else {
+      throw new Error('Failed');
+    }
+  } catch (e) {
+    document.getElementById('goSubmitStatus').textContent = t('go_submit_error');
+    document.getElementById('goSubmitStatus').style.color = 'var(--red)';
+    btn.disabled = false;
+    btn.textContent = t('go_submit');
+  }
+}
+
+async function showLeaderboardScreen() {
+  showScreen('leaderboardScreen');
+  document.getElementById('lbSubtitle').textContent = t('lb_subtitle');
+  const list = document.getElementById('leaderboardList');
+  list.innerHTML = `<div class="lb-empty">${lang==='ko'?'불러오는 중…':'Loading…'}</div>`;
+
+  try {
+    const res = await fetch('/api/leaderboard');
+    const entries = await res.json();
+    list.innerHTML = '';
+    if (!entries.length) {
+      list.innerHTML = `<div class="lb-empty">${t('lb_empty')}</div>`;
+      return;
+    }
+    entries.forEach((entry, i) => {
+      const row = document.createElement('div');
+      row.className = 'lb-row';
+      const rankClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
+      const rankIcon = i===0?'👑':i===1?'🥈':i===2?'🥉':`${i+1}`;
+      const diffColors = {easy:'#3dba6f',normal:'var(--gold-light)',hard:'#ff9860',insane:'#ff6060'};
+      const diffColor = diffColors[entry.difficulty]||'var(--text-muted)';
+      const date = new Date(entry.createdAt).toLocaleDateString(lang==='ko'?'ko-KR':'en-US',{month:'short',day:'numeric'});
+      row.innerHTML = `
+        <div class="lb-rank ${rankClass}">${rankIcon}</div>
+        <div class="lb-info">
+          <div class="lb-name">${entry.nickname}</div>
+          <div class="lb-meta">Rd.${entry.round} · <span style="color:${diffColor}">${entry.difficulty.toUpperCase()}</span> · ${date}</div>
+        </div>
+        <div class="lb-pts">${entry.points}P</div>
+      `;
+      list.appendChild(row);
+    });
+  } catch (e) {
+    list.innerHTML = `<div class="lb-empty">${lang==='ko'?'불러오기 실패':'Failed to load'}</div>`;
+  }
 }
 
 function showTitle() { showScreen('titleScreen'); applyLang(); }
@@ -928,12 +1021,12 @@ function renderHandResult() {
   document.getElementById('handName').textContent=VidaGame.getHandName(result.key,lang);
   document.getElementById('handMult').textContent='×'+result.mult.toFixed(2);
   document.getElementById('expectedReturnLabel').textContent=t('hud_expected');
-  // Show total return: original bet (held) + profit - roundCost
-  const totalReturn = G.betHeld + result.lifeReturn - G.roundCost;
+  // Show total return: winnings (bet*mult) - roundCost (bet was already deducted at preBet)
+  const totalReturn = result.lifeReturn - G.roundCost;
   const returnStr = totalReturn >= 0 ? `+${totalReturn.toFixed(2)}` : totalReturn.toFixed(2);
   document.getElementById('expectedReturn').textContent=`${returnStr} ♥`;
   document.getElementById('expectedReturn').style.color = totalReturn >= 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('betInfo').textContent=`예치 ${G.betHeld.toFixed(1)}♥ + 수익 ${result.lifeReturn.toFixed(1)}♥ − 차감 ${G.roundCost.toFixed(1)}♥`;
+  document.getElementById('betInfo').textContent=`−${G.betHeld.toFixed(1)}♥ (베팅) + ${result.lifeReturn.toFixed(1)}♥ (획득) − ${G.roundCost.toFixed(1)}♥ (차감)`;
   const sb=result.suitBonus;
   const sbRow=document.getElementById('suitBonusRow');
   sbRow.innerHTML='';

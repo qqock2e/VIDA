@@ -356,6 +356,19 @@ body::before{content:'';position:fixed;inset:0;background:
 .notif-red {border-color:rgba(232,65,65,.48); color:#ff9090;}
 .notif-green{border-color:rgba(61,186,111,.48);color:#88dda8;}
 
+/* ────────── LEADERBOARD ────────── */
+.lb-row{display:flex;align-items:center;gap:.7rem;padding:.65rem .9rem;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);transition:background .15s;}
+.lb-row:hover{background:rgba(255,255,255,.08);}
+.lb-rank{font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:700;width:2.2rem;text-align:center;}
+.lb-rank.gold{color:#ffd700;}
+.lb-rank.silver{color:#c0c0c0;}
+.lb-rank.bronze{color:#cd7f32;}
+.lb-info{flex:1;min-width:0;}
+.lb-name{font-size:.88rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lb-meta{font-size:.68rem;color:var(--text-muted);margin-top:.15rem;}
+.lb-pts{font-family:'Orbitron',sans-serif;font-size:1rem;font-weight:700;color:var(--blue);}
+.lb-empty{text-align:center;color:var(--text-muted);padding:2rem;font-size:.85rem;}
+
 .hidden{display:none!important;}
 ::-webkit-scrollbar{width:5px;}
 ::-webkit-scrollbar-track{background:transparent;}
@@ -364,13 +377,37 @@ body::before{content:'';position:fixed;inset:0;background:
   .hand-section{flex-direction:column;}
   .hand-info{min-width:0;width:100%;}
   .diff-grid,.passive-grid{grid-template-columns:1fr;}
-  .card{width:60px;height:86px;}
-  .card-rank{font-size:.9rem;}
-  .card-suit{font-size:1.2rem;}
+  .card{width:54px;height:78px;}
+  .card-rank{font-size:.82rem;}
+  .card-suit{font-size:1.05rem;}
+  .card-corner .cr,.card-corner-br .cr{font-size:.68rem;}
+  .card-corner .cs,.card-corner-br .cs{font-size:.58rem;}
   .top-bar{flex-wrap:wrap;}
   .settle-fold-row{flex-direction:column;}
-  #multTotalDisplay{font-size:2.2rem;top:14%;}
-  .mult-line{font-size:.78rem;}
+  #multTotalDisplay{font-size:2rem;top:12%;}
+  .mult-line{font-size:.72rem;padding:.15rem .5rem;}
+  #multBreakdownWrap{top:22%;min-width:140px;}
+  .stat-box{min-width:60px;padding:.4rem .6rem;}
+  .stat-val{font-size:1rem;}
+  .btn-reveal-large,.btn-deal-large{padding:.65rem;font-size:.88rem;}
+  .btn-settle-big,.btn-fold-half{padding:.65rem;font-size:.88rem;}
+  .bet-amount-display{font-size:1rem;min-width:70px;}
+  .bet-btns{gap:.2rem;}
+  .bet-btns .btn-xs{padding:.2rem .4rem;font-size:.65rem;}
+  .hand-mult{font-size:1.4rem;}
+  .hand-name{font-size:.9rem;}
+  .field-section,.hand-section,.action-section,.prebet-section{padding:.7rem .8rem;}
+  .go-title-text{font-size:2.4rem;}
+  .go-stat-val{font-size:1.4rem;}
+  .go-panel{padding:1.5rem 1.2rem;}
+  .life-bar-wrap{min-width:100px;}
+  .cards-row{gap:.4rem;justify-content:center;}
+  .prebet-title{font-size:1rem;}
+  .prebet-info{font-size:.72rem;}
+  .phase-info{font-size:.68rem;min-width:100px;}
+  .modal-box{padding:1.2rem;}
+  .modal-title{font-size:1.1rem;}
+  #leaderboardScreen > div{padding:1.2rem 1rem;}
 }
 </style>
 </head>
@@ -408,6 +445,7 @@ body::before{content:'';position:fixed;inset:0;background:
       </div>
     </div>
     <button class="btn btn-gold" id="btnStartGame" onclick="startGame()">▶  START GAME</button>
+    <button class="btn btn-blue" style="width:100%;margin-top:.6rem;" onclick="showLeaderboardScreen()">🏆 LEADERBOARD</button>
   </div>
 </div>
 
@@ -538,7 +576,25 @@ body::before{content:'';position:fixed;inset:0;background:
       <div><div class="go-stat-label" id="goFinalRoundLabel">Final Round</div><div class="go-stat-val gold" id="finalRound">0</div></div>
       <div><div class="go-stat-label" id="goPointsLabel">Total Points</div><div class="go-stat-val blue" id="finalPoints">0</div></div>
     </div>
+    <div id="goNicknameSection" style="margin:1rem 0;">
+      <div style="font-size:.8rem;color:var(--gold-light);margin-bottom:.5rem;" id="goNicknameLabel">닉네임을 입력하세요</div>
+      <div style="display:flex;gap:.5rem;">
+        <input type="text" id="goNicknameInput" maxlength="12" placeholder="Nickname" style="flex:1;padding:.55rem .8rem;border-radius:8px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text);font-size:.9rem;font-family:'Noto Sans KR',sans-serif;outline:none;">
+        <button class="btn btn-gold" style="width:auto;padding:.55rem 1rem;font-size:.85rem;" id="btnSubmitScore" onclick="submitScore()">등록</button>
+      </div>
+      <div id="goSubmitStatus" style="font-size:.72rem;color:var(--text-muted);margin-top:.35rem;"></div>
+    </div>
     <button class="btn btn-gold" id="btnHome" onclick="showTitle()">Back to Title</button>
+  </div>
+</div>
+
+<!-- ══ LEADERBOARD ══ -->
+<div class="screen" id="leaderboardScreen">
+  <div class="glass" style="padding:1.75rem 2rem;width:min(500px,100%);max-height:90vh;overflow-y:auto;">
+    <div style="font-family:'Cinzel',serif;font-size:1.5rem;color:var(--gold);text-align:center;margin-bottom:.3rem;">🏆 LEADERBOARD</div>
+    <div style="font-size:.78rem;color:var(--text-muted);text-align:center;margin-bottom:1.2rem;" id="lbSubtitle">Top 10 Players</div>
+    <div id="leaderboardList" style="display:flex;flex-direction:column;gap:.5rem;"></div>
+    <button class="btn btn-gold" style="margin-top:1.2rem;" onclick="showTitle()">← Back to Title</button>
   </div>
 </div>
 

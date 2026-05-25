@@ -628,11 +628,11 @@ function placeBet(G) {
   const result  = computeReturn(G);
   const preset  = DIFFICULTY_PRESETS[G.settings.difficulty];
 
-  // Return: original bet + profit (bet * mult), minus round cost
-  // lifeReturn = bet * mult is the PROFIT only
-  const profit     = result.lifeReturn; // betAmount * totalMult (profit only)
-  const totalReturn= +(G.betHeld + profit).toFixed(2); // original bet + profit
-  const netGain    = +(totalReturn - G.roundCost).toFixed(2);
+  // Return formula: -bet (already deducted at preBet) + bet*mult (winnings) - roundCost
+  // So net = bet*(mult - 1) - roundCost  (at mult=1x you just recover your bet)
+  // lifeReturn = betAmount * totalMult = total winnings
+  const winnings   = result.lifeReturn; // betAmount * totalMult
+  const netGain    = +(winnings - G.roundCost).toFixed(2);
 
   G.life = Math.max(0, +(G.life + netGain).toFixed(2));
 
@@ -642,8 +642,8 @@ function placeBet(G) {
 
   G.lastResult = {
     type:'bet', handKey:result.key, mult:result.mult,
-    lifeGain:profit, lifeCost:G.roundCost, netGain,
-    totalReturn, betReturned:G.betHeld,
+    lifeGain:winnings, lifeCost:G.roundCost, netGain,
+    totalReturn:winnings, betReturned:0, // bet is NOT returned separately; winnings already include it at 1x
     pointsEarned:pts, suitBonus:result.suitBonus,
     rankBonus:result.rankBonus,
     breakdown:result.breakdown, handMult:result.handMult,
