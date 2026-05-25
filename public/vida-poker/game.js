@@ -508,6 +508,7 @@ function initGame(settings={}) {
     roundCost:  0,
     passives:   {},
     heldItem:   null,
+    betHeld:    0,         // amount held in escrow during betting phase
     itemUsedThisRound: false,
     nextItemAtRound: 10,
     logs:       [],
@@ -523,14 +524,17 @@ function enterPreBet(G) {
   const preset  = DIFFICULTY_PRESETS[G.settings.difficulty];
   const passive = getPassiveEffect(G.passives);
   const baseBet = +(preset.baseBet + (passive.betBonus||0)).toFixed(2);
-  G.betAmount   = Math.min(baseBet, G.life);
-  G.minBet      = baseBet;
+  // Minimum bet is the smaller of baseBet and current life (can't bet more than you have)
+  const minBet  = Math.min(baseBet, G.life);
+  G.betAmount   = minBet;
+  G.minBet      = minBet;
   G.phase       = 'preBet';
   G.handCards   = [];
   G.fieldCards  = [];
   G.revealedCount = 0;
   G.itemUsedThisRound = false;
   G.lastResult  = null;
+  G.betHeld     = 0;
   return G;
 }
 
@@ -540,6 +544,14 @@ function enterPreBet(G) {
 function confirmBetAndDeal(G) {
   if (G.phase !== 'preBet') return false;
   if (G.betAmount <= 0) return false;
+
+  // Clamp bet to current life (safety)
+  G.betAmount = Math.min(G.betAmount, G.life);
+  if (G.betAmount <= 0) return false;
+
+  // Deduct bet from life upfront (held in escrow)
+  G.life = +(G.life - G.betAmount).toFixed(2);
+  G.betHeld = G.betAmount; // track how much was held
 
   G.deck        = shuffle(makeDeck());
   G.handCards   = [drawCard(G), drawCard(G)];
@@ -573,6 +585,8 @@ function adjustBet(G, mode) {
   const passive = getPassiveEffect(G.passives);
   const baseBet = +(preset.baseBet+(passive.betBonus||0)).toFixed(2);
   const maxBet  = +G.life.toFixed(2);
+  // Minimum: at least the smaller of baseBet or remaining life
+  const minBet  = Math.min(baseBet, maxBet);
   let bet = G.betAmount;
 
   switch(mode) {
@@ -587,7 +601,9 @@ function adjustBet(G, mode) {
     case 'allin':bet=maxBet; break;
     default: return false;
   }
-  bet = Math.min(maxBet, Math.max(baseBet, +bet.toFixed(2)));
+  // Clamp: never below minBet, never above maxBet, never 0
+  bet = Math.min(maxBet, Math.max(minBet, +bet.toFixed(2)));
+  if (bet <= 0) return false; // can't bet 0
   G.betAmount = bet;
   return true;
 }
@@ -610,11 +626,15 @@ function placeBet(G) {
   if (G.phase!=='betting') return null;
   G.phase='resolving';
   const result  = computeReturn(G);
-  const earned  = result.lifeReturn;
-  const netGain = +(earned - G.roundCost).toFixed(2);
   const preset  = DIFFICULTY_PRESETS[G.settings.difficulty];
 
-  G.life = Math.max(0, +(G.life+netGain).toFixed(2));
+  // Return: original bet + profit (bet * mult), minus round cost
+  // lifeReturn = bet * mult is the PROFIT only
+  const profit     = result.lifeReturn; // betAmount * totalMult (profit only)
+  const totalReturn= +(G.betHeld + profit).toFixed(2); // original bet + profit
+  const netGain    = +(totalReturn - G.roundCost).toFixed(2);
+
+  G.life = Math.max(0, +(G.life + netGain).toFixed(2));
 
   // Fixed points per hand type + small bonus from difficulty
   const pts = Math.floor((HAND_POINTS[result.key]||0) * preset.pointMult);
@@ -622,13 +642,15 @@ function placeBet(G) {
 
   G.lastResult = {
     type:'bet', handKey:result.key, mult:result.mult,
-    lifeGain:earned, lifeCost:G.roundCost, netGain,
+    lifeGain:profit, lifeCost:G.roundCost, netGain,
+    totalReturn, betReturned:G.betHeld,
     pointsEarned:pts, suitBonus:result.suitBonus,
     rankBonus:result.rankBonus,
     breakdown:result.breakdown, handMult:result.handMult,
     rarity:result.rarity, contributingIndices:result.contributingIndices,
-    betAmount:G.betAmount, lifeAfter:G.life,
+    betAmount:G.betHeld, lifeAfter:G.life,
   };
+  G.betHeld = 0;
   addLog(G,`bet:${result.key}:${result.mult.toFixed(2)}:${netGain}`);
   return G.lastResult;
 }
@@ -641,9 +663,20 @@ function fold(G) {
   G.phase='resolving';
   const passive   = getPassiveEffect(G.passives);
   const refund    = passive.foldRefund||0;
+
+  // Recover half the bet
+  const halfBet   = +(G.betHeld * 0.5).toFixed(2);
+  // Round cost drain (with insurance refund)
   const lifeCost  = +(G.roundCost*(1-refund)).toFixed(2);
-  G.life          = Math.max(0, +(G.life-lifeCost).toFixed(2));
-  G.lastResult    = { type:'fold', lifeCost, netGain:-lifeCost, lifeAfter:G.life, pointsEarned:0 };
+  const recovery  = +(halfBet - lifeCost).toFixed(2);
+
+  G.life = Math.max(0, +(G.life + recovery).toFixed(2));
+  G.lastResult = {
+    type:'fold', lifeCost, betRecovered:halfBet, betLost:+(G.betHeld*0.5).toFixed(2),
+    netGain:recovery, lifeAfter:G.life, pointsEarned:0,
+    betAmount:G.betHeld,
+  };
+  G.betHeld = 0;
   addLog(G,`fold:${lifeCost}`);
   return G.lastResult;
 }

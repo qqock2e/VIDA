@@ -232,15 +232,31 @@ function startGame() {
 // ─────────────────────────────────────────────
 function confirmBetAndDeal() {
   if (!G||G.phase!=='preBet') return;
+  const prevLife = G.life;
   if (!VidaGame.confirmBetAndDeal(G)) return;
-  sfx('reveal');
-  sfx('reveal');
+
+  // Animate the bet deduction
+  sfx('fold'); // deduction sound
+  animateLifeChange(prevLife, G.life);
   renderAll();
-  // Animate initial card reveals
-  setTimeout(()=>animateRevealCard(0), 100);
-  setTimeout(()=>animateRevealCard(1), 250);
-  setTimeout(()=>animateRevealCard(0), 100); // hand cards
-  setTimeout(()=>animateRevealCard(1), 200);
+
+  // Animate initial card reveals after a short delay
+  setTimeout(()=>{
+    sfx('reveal');
+    sfx('reveal');
+    // Hand card reveals
+    const handEls = [...document.querySelectorAll('#handCards .card')];
+    handEls.forEach((el,i)=>{
+      setTimeout(()=>{ el.classList.add('card-reveal'); setTimeout(()=>el.classList.remove('card-reveal'),500); }, i*150);
+    });
+    // Field card reveals
+    const fieldEls = [...document.querySelectorAll('#fieldCards .card')];
+    fieldEls.forEach((el,i)=>{
+      if (i < G.revealedCount) {
+        setTimeout(()=>{ el.classList.add('card-reveal'); setTimeout(()=>el.classList.remove('card-reveal'),500); }, 300+i*150);
+      }
+    });
+  }, 400);
 }
 
 // ─────────────────────────────────────────────
@@ -443,6 +459,31 @@ function showMultiplierBreakdown(result, onDone) {
     delay += BASE_DELAY;
   });
 
+  // Show "Bet returned" line
+  if (result.betReturned > 0) {
+    setTimeout(()=>{
+      const line = document.createElement('div');
+      line.className = 'mult-line suit';
+      line.style.color = '#6eff90';
+      line.textContent = `+${result.betReturned.toFixed(1)}♥ (베팅 반환)`;
+      wrap.appendChild(line);
+      sfx('mult');
+    }, delay);
+    delay += BASE_DELAY;
+  }
+
+  // Show round cost drain
+  if (result.lifeCost > 0) {
+    setTimeout(()=>{
+      const line = document.createElement('div');
+      line.className = 'mult-line hand';
+      line.style.color = '#ff7070';
+      line.textContent = `−${result.lifeCost.toFixed(1)}♥ (라운드 차감)`;
+      wrap.appendChild(line);
+    }, delay);
+    delay += BASE_DELAY;
+  }
+
   // After all breakdown items, show the total
   setTimeout(()=>{
     totalEl.textContent = `×${result.mult.toFixed(2)}`;
@@ -453,6 +494,7 @@ function showMultiplierBreakdown(result, onDone) {
     label.textContent = `${netStr}♥`;
     totalEl.appendChild(label);
     totalEl.classList.add('visible');
+    totalEl.style.color = '';
     sfx('total');
 
     // Screen shake for big multipliers
@@ -465,6 +507,77 @@ function showMultiplierBreakdown(result, onDone) {
   setTimeout(()=>{
     wrap.innerHTML = '';
     totalEl.classList.remove('visible');
+    if (onDone) onDone();
+  }, totalDuration);
+}
+
+// ─────────────────────────────────────────────
+// FOLD DISPLAY
+// ─────────────────────────────────────────────
+function showFoldDisplay(result, onDone) {
+  const wrap = document.getElementById('multBreakdownWrap');
+  const totalEl = document.getElementById('multTotalDisplay');
+  wrap.innerHTML = '';
+  totalEl.classList.remove('visible');
+
+  // Show bet recovery and drain
+  let delay = 0;
+  const BASE_DELAY = 400;
+
+  // Show "Half bet recovered"
+  if (result.betRecovered > 0) {
+    setTimeout(()=>{
+      const line = document.createElement('div');
+      line.className = 'mult-line passive';
+      line.textContent = `+${result.betRecovered.toFixed(1)}♥ (베팅 절반 회수)`;
+      wrap.appendChild(line);
+      sfx('mult');
+    }, delay);
+    delay += BASE_DELAY;
+  }
+
+  // Show "Bet lost"
+  if (result.betLost > 0) {
+    setTimeout(()=>{
+      const line = document.createElement('div');
+      line.className = 'mult-line hand';
+      line.style.color = '#ff7070';
+      line.textContent = `−${result.betLost.toFixed(1)}♥ (베팅 상실)`;
+      wrap.appendChild(line);
+    }, delay);
+    delay += BASE_DELAY;
+  }
+
+  // Show round cost
+  if (result.lifeCost > 0) {
+    setTimeout(()=>{
+      const line = document.createElement('div');
+      line.className = 'mult-line hand';
+      line.style.color = '#ff7070';
+      line.textContent = `−${result.lifeCost.toFixed(1)}♥ (라운드 차감)`;
+      wrap.appendChild(line);
+    }, delay);
+    delay += BASE_DELAY;
+  }
+
+  // Show total net
+  setTimeout(()=>{
+    totalEl.textContent = result.netGain >= 0 ? `+${result.netGain.toFixed(1)}` : result.netGain.toFixed(1);
+    totalEl.querySelector('.mult-label')?.remove();
+    const label = document.createElement('span');
+    label.className = 'mult-label';
+    label.textContent = '🏳 폴드';
+    totalEl.appendChild(label);
+    totalEl.style.color = result.netGain >= 0 ? 'var(--green)' : 'var(--red)';
+    totalEl.classList.add('visible');
+    sfx('fold');
+  }, delay + 200);
+
+  const totalDuration = delay + 200 + 1200;
+  setTimeout(()=>{
+    wrap.innerHTML = '';
+    totalEl.classList.remove('visible');
+    totalEl.style.color = '';
     if (onDone) onDone();
   }, totalDuration);
 }
@@ -529,8 +642,8 @@ function foldRound() {
   const prev=+(G.life-result.netGain).toFixed(2);
   renderAll();
 
-  // Show fold multiplier display (×0)
-  showMultiplierBreakdown(result, ()=>{
+  // Show fold display (half bet recovered)
+  showFoldDisplay(result, ()=>{
     animateLifeChange(prev, G.life);
     isAnimating = false;
 
@@ -704,7 +817,9 @@ function renderAll() {
 }
 
 function renderStats() {
-  document.getElementById('lifeDisplay').textContent  =G.life.toFixed(1);
+  // During betting phase, life already has bet deducted; show "available" life
+  const displayLife = G.life;
+  document.getElementById('lifeDisplay').textContent  =displayLife.toFixed(1);
   document.getElementById('roundDisplay').textContent =G.round;
   document.getElementById('pointDisplay').textContent =G.totalPoints;
   document.getElementById('roundCostDisplay').textContent=`−${G.roundCost}`;
@@ -712,17 +827,35 @@ function renderStats() {
   document.getElementById('hudRoundLabel').textContent =t('hud_round');
   document.getElementById('hudPointsLabel').textContent=t('hud_points');
   document.getElementById('hudCostLabel').textContent  =t('hud_cost_label');
-  const pct=Math.min(100,(G.life/G.maxLife)*100);
+  const pct=Math.min(100,(displayLife/G.maxLife)*100);
   document.getElementById('lifeBarFill').style.width=pct+'%';
-  document.getElementById('lifeBarText').textContent=`${G.life.toFixed(1)} / ${G.maxLife}`;
+  document.getElementById('lifeBarText').textContent=`${displayLife.toFixed(1)} / ${G.maxLife}`;
+
+  // Show bet held indicator during betting phase
+  const lifeBarWrap = document.querySelector('.life-bar-wrap');
+  if (lifeBarWrap) {
+    let betHeldEl = document.getElementById('betHeldIndicator');
+    if (G.phase === 'betting' && G.betHeld > 0) {
+      if (!betHeldEl) {
+        betHeldEl = document.createElement('div');
+        betHeldEl.id = 'betHeldIndicator';
+        betHeldEl.style.cssText = 'font-size:.68rem;color:var(--gold-light);margin-top:.15rem;';
+        lifeBarWrap.appendChild(betHeldEl);
+      }
+      betHeldEl.textContent = `🎰 베팅 예치: ${G.betHeld.toFixed(1)}♥`;
+    } else if (betHeldEl) {
+      betHeldEl.remove();
+    }
+  }
 }
 
 function renderPreBetBar() {
   if (!G) return;
   const preset=VidaGame.DIFFICULTY_PRESETS[G.settings.difficulty];
   const passive=VidaGame.getPassiveEffect(G.passives);
-  const minBet=+(preset.baseBet+(passive.betBonus||0)).toFixed(2);
+  const baseBet=+(preset.baseBet+(passive.betBonus||0)).toFixed(2);
   const maxBet=G.life;
+  const minBet=Math.min(baseBet, maxBet);
 
   // Update preBet section display
   const preBetDisplay = document.getElementById('preBetAmountDisplay');
@@ -731,6 +864,12 @@ function renderPreBetBar() {
   const pct=maxBet>0?Math.min(100,((G.betAmount-minBet)/(maxBet-minBet||1))*100):0;
   const fill=document.getElementById('preBetBarFill');
   if (fill) fill.style.width=pct+'%';
+
+  // Update info text with current bet amount
+  const preBetInfo = document.getElementById('preBetInfo');
+  if (preBetInfo && G.phase === 'preBet') {
+    preBetInfo.innerHTML = t('prebet_info') + `<br><span style="color:var(--gold-light);">🎰 베팅 금액 ${G.betAmount.toFixed(1)}♥이 즉시 차감되며, 정산 시 반환됩니다.</span>`;
+  }
 }
 
 function renderPreBetSection() {
@@ -746,7 +885,7 @@ function renderPreBetSection() {
     actionSection.style.display = 'none';
 
     document.getElementById('preBetTitle').textContent = t('prebet_title');
-    document.getElementById('preBetInfo').textContent  = t('prebet_info');
+    document.getElementById('preBetInfo').innerHTML  = t('prebet_info') + `<br><span style="color:var(--gold-light);">🎰 베팅 금액 ${G.betAmount.toFixed(1)}♥이 즉시 차감되며, 정산 시 반환됩니다.</span>`;
     document.getElementById('btnDeal').textContent     = t('btn_deal');
     renderPreBetBar();
   } else {
@@ -789,8 +928,12 @@ function renderHandResult() {
   document.getElementById('handName').textContent=VidaGame.getHandName(result.key,lang);
   document.getElementById('handMult').textContent='×'+result.mult.toFixed(2);
   document.getElementById('expectedReturnLabel').textContent=t('hud_expected');
-  document.getElementById('expectedReturn').textContent=`+${result.lifeReturn.toFixed(2)} ♥`;
-  document.getElementById('betInfo').textContent=`♥${G.betAmount.toFixed(1)} × ×${result.mult.toFixed(2)}`;
+  // Show total return: original bet (held) + profit - roundCost
+  const totalReturn = G.betHeld + result.lifeReturn - G.roundCost;
+  const returnStr = totalReturn >= 0 ? `+${totalReturn.toFixed(2)}` : totalReturn.toFixed(2);
+  document.getElementById('expectedReturn').textContent=`${returnStr} ♥`;
+  document.getElementById('expectedReturn').style.color = totalReturn >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('betInfo').textContent=`예치 ${G.betHeld.toFixed(1)}♥ + 수익 ${result.lifeReturn.toFixed(1)}♥ − 차감 ${G.roundCost.toFixed(1)}♥`;
   const sb=result.suitBonus;
   const sbRow=document.getElementById('suitBonusRow');
   sbRow.innerHTML='';
