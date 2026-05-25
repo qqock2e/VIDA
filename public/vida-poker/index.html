@@ -357,17 +357,27 @@ body::before{content:'';position:fixed;inset:0;background:
 .notif-green{border-color:rgba(61,186,111,.48);color:#88dda8;}
 
 /* ────────── LEADERBOARD ────────── */
-.lb-row{display:flex;align-items:center;gap:.7rem;padding:.65rem .9rem;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);transition:background .15s;}
+#leaderboardScreen{align-items:center;justify-content:center;}
+.lb-tabs{display:flex;gap:.3rem;margin-bottom:1rem;justify-content:center;flex-wrap:wrap;}
+.lb-tab{padding:.35rem .7rem;border-radius:8px;font-size:.72rem;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--text-muted);transition:all .15s;font-family:'Orbitron',sans-serif;}
+.lb-tab:hover{background:rgba(255,255,255,.08);}
+.lb-tab.active{border-color:rgba(212,168,67,.5);color:var(--gold-light);background:rgba(212,168,67,.1);}
+.lb-tab[data-diff="easy"]:hover,.lb-tab[data-diff="easy"].active{border-color:rgba(61,186,111,.5);color:#3dba6f;background:rgba(61,186,111,.08);}
+.lb-tab[data-diff="hard"]:hover,.lb-tab[data-diff="hard"].active{border-color:rgba(255,152,96,.5);color:#ff9860;background:rgba(255,152,96,.08);}
+.lb-tab[data-diff="insane"]:hover,.lb-tab[data-diff="insane"].active{border-color:rgba(255,96,96,.5);color:#ff6060;background:rgba(255,96,96,.08);}
+.lb-section-title{font-family:'Cinzel',serif;font-size:.85rem;color:var(--gold-light);margin:1rem 0 .5rem;text-align:center;letter-spacing:.06em;}
+.lb-row{display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);transition:background .15s;}
 .lb-row:hover{background:rgba(255,255,255,.08);}
-.lb-rank{font-family:'Orbitron',sans-serif;font-size:1.1rem;font-weight:700;width:2.2rem;text-align:center;}
+.lb-rank{font-family:'Orbitron',sans-serif;font-size:1rem;font-weight:700;width:2rem;text-align:center;flex-shrink:0;}
 .lb-rank.gold{color:#ffd700;}
 .lb-rank.silver{color:#c0c0c0;}
 .lb-rank.bronze{color:#cd7f32;}
 .lb-info{flex:1;min-width:0;}
-.lb-name{font-size:.88rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.lb-meta{font-size:.68rem;color:var(--text-muted);margin-top:.15rem;}
-.lb-pts{font-family:'Orbitron',sans-serif;font-size:1rem;font-weight:700;color:var(--blue);}
-.lb-empty{text-align:center;color:var(--text-muted);padding:2rem;font-size:.85rem;}
+.lb-name{font-size:.82rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lb-meta{font-size:.6rem;color:var(--text-muted);margin-top:.1rem;}
+.lb-pts{font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:700;color:var(--blue);flex-shrink:0;}
+.lb-round{font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:700;color:var(--gold);flex-shrink:0;}
+.lb-empty{text-align:center;color:var(--text-muted);padding:1.5rem;font-size:.82rem;}
 
 .hidden{display:none!important;}
 ::-webkit-scrollbar{width:5px;}
@@ -408,6 +418,11 @@ body::before{content:'';position:fixed;inset:0;background:
   .modal-box{padding:1.2rem;}
   .modal-title{font-size:1.1rem;}
   #leaderboardScreen > div{padding:1.2rem 1rem;}
+  .lb-tab{font-size:.62rem;padding:.28rem .5rem;}
+  .lb-row{gap:.4rem;padding:.4rem .6rem;}
+  .lb-rank{font-size:.85rem;width:1.6rem;}
+  .lb-name{font-size:.75rem;}
+  .lb-pts,.lb-round{font-size:.72rem;}
 }
 </style>
 </head>
@@ -518,10 +533,12 @@ body::before{content:'';position:fixed;inset:0;background:
     <div class="cards-row" id="fieldCards"></div>
   </div>
 
+  <!-- HAND BADGE (centered on game screen) -->
+  <div id="handBadge"></div>
+
   <!-- HAND (hidden during preBet) -->
   <div class="glass hand-section" id="handSection">
     <div id="handFlashOverlay"></div>
-    <div id="handBadge"></div>
 
     <div class="hand-cards">
       <div class="section-title" id="handSectionTitle">✦ Your Hand</div>
@@ -590,11 +607,18 @@ body::before{content:'';position:fixed;inset:0;background:
 
 <!-- ══ LEADERBOARD ══ -->
 <div class="screen" id="leaderboardScreen">
-  <div class="glass" style="padding:1.75rem 2rem;width:min(500px,100%);max-height:90vh;overflow-y:auto;">
-    <div style="font-family:'Cinzel',serif;font-size:1.5rem;color:var(--gold);text-align:center;margin-bottom:.3rem;">🏆 LEADERBOARD</div>
-    <div style="font-size:.78rem;color:var(--text-muted);text-align:center;margin-bottom:1.2rem;" id="lbSubtitle">Top 10 Players</div>
-    <div id="leaderboardList" style="display:flex;flex-direction:column;gap:.5rem;"></div>
-    <button class="btn btn-gold" style="margin-top:1.2rem;" onclick="showTitle()">← Back to Title</button>
+  <div class="glass" style="padding:1.5rem 1.5rem;width:min(520px,100%);max-height:90vh;overflow-y:auto;">
+    <div style="font-family:'Cinzel',serif;font-size:1.4rem;color:var(--gold);text-align:center;margin-bottom:.2rem;">🏆 LEADERBOARD</div>
+    <div style="font-size:.72rem;color:var(--text-muted);text-align:center;margin-bottom:.8rem;" id="lbSubtitle">Top Players by Round</div>
+    <div class="lb-tabs" id="lbTabs">
+      <div class="lb-tab active" data-diff="all" onclick="switchLbTab('all')">ALL</div>
+      <div class="lb-tab" data-diff="easy" onclick="switchLbTab('easy')">EASY</div>
+      <div class="lb-tab" data-diff="normal" onclick="switchLbTab('normal')">NORMAL</div>
+      <div class="lb-tab" data-diff="hard" onclick="switchLbTab('hard')">HARD</div>
+      <div class="lb-tab" data-diff="insane" onclick="switchLbTab('insane')">INSANE</div>
+    </div>
+    <div id="leaderboardList" style="display:flex;flex-direction:column;gap:.4rem;"></div>
+    <button class="btn btn-gold" style="margin-top:1rem;" onclick="showTitle()">← Back to Title</button>
   </div>
 </div>
 

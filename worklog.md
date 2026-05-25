@@ -98,3 +98,29 @@ Stage Summary:
 - Leaderboard screen with top 10 display (gold/silver/bronze icons)
 - Game over with nickname input → score submission to API
 - Title screen has leaderboard button
+
+---
+Task ID: 5
+Agent: main
+Task: Fix centering, game-over→title bug, round-based leaderboard with difficulty tabs, DB migration prep
+
+Work Log:
+- Moved #handBadge from inside #handSection to direct child of #gameScreen for proper centering
+- Added #leaderboardScreen centering via align-items:center;justify-content:center
+- Fixed showTitle() to reset G=null, preventing stale game state showing betting screen
+- Updated leaderboard API (route.ts): sort by round DESC, points DESC; added ?difficulty= filter param
+- Changed GET /api/leaderboard: without filter returns 30 entries, with filter returns top 10
+- Added difficulty tab UI (ALL/EASY/NORMAL/HARD/INSANE) with switchLbTab() function
+- In "ALL" tab, entries grouped by difficulty sections (insane→hard→normal→easy)
+- Each row shows round number prominently (Rd.N) as primary ranking metric
+- Added .lb-tabs, .lb-tab, .lb-section-title, .lb-round CSS classes
+- Added mobile responsive styles for leaderboard tabs and rows
+- DB migration: installed @prisma/adapter-pg and pg packages for PostgreSQL support
+- Kept SQLite for local dev; provided deployment guide with PostgreSQL setup instructions
+
+Stage Summary:
+- Hand badge and leaderboard properly centered on screen
+- Game over → title screen no longer shows betting screen (G=null reset)
+- Leaderboard is round-based with difficulty tab sections
+- API supports ?difficulty= filter and round DESC sorting
+- PostgreSQL packages installed, ready for production migration

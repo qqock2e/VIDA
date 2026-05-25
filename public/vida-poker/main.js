@@ -833,44 +833,84 @@ async function submitScore() {
   }
 }
 
+let currentLbTab = 'all';
+
 async function showLeaderboardScreen() {
+  currentLbTab = 'all';
   showScreen('leaderboardScreen');
-  document.getElementById('lbSubtitle').textContent = t('lb_subtitle');
+  document.getElementById('lbSubtitle').textContent = lang==='ko'?'라운드 순위':'Top Players by Round';
+  // Reset tab active state
+  document.querySelectorAll('.lb-tab').forEach(t=>t.classList.toggle('active',t.dataset.diff==='all'));
+  await loadLeaderboard();
+}
+
+function switchLbTab(diff) {
+  currentLbTab = diff;
+  document.querySelectorAll('.lb-tab').forEach(t=>t.classList.toggle('active',t.dataset.diff===diff));
+  loadLeaderboard();
+}
+
+async function loadLeaderboard() {
   const list = document.getElementById('leaderboardList');
   list.innerHTML = `<div class="lb-empty">${lang==='ko'?'불러오는 중…':'Loading…'}</div>`;
 
   try {
-    const res = await fetch('/api/leaderboard');
+    const url = currentLbTab === 'all' ? '/api/leaderboard' : `/api/leaderboard?difficulty=${currentLbTab}`;
+    const res = await fetch(url);
     const entries = await res.json();
     list.innerHTML = '';
+
     if (!entries.length) {
       list.innerHTML = `<div class="lb-empty">${t('lb_empty')}</div>`;
       return;
     }
-    entries.forEach((entry, i) => {
-      const row = document.createElement('div');
-      row.className = 'lb-row';
-      const rankClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
-      const rankIcon = i===0?'👑':i===1?'🥈':i===2?'🥉':`${i+1}`;
-      const diffColors = {easy:'#3dba6f',normal:'var(--gold-light)',hard:'#ff9860',insane:'#ff6060'};
-      const diffColor = diffColors[entry.difficulty]||'var(--text-muted)';
-      const date = new Date(entry.createdAt).toLocaleDateString(lang==='ko'?'ko-KR':'en-US',{month:'short',day:'numeric'});
-      row.innerHTML = `
-        <div class="lb-rank ${rankClass}">${rankIcon}</div>
-        <div class="lb-info">
-          <div class="lb-name">${entry.nickname}</div>
-          <div class="lb-meta">Rd.${entry.round} · <span style="color:${diffColor}">${entry.difficulty.toUpperCase()}</span> · ${date}</div>
-        </div>
-        <div class="lb-pts">${entry.points}P</div>
-      `;
-      list.appendChild(row);
-    });
+
+    if (currentLbTab === 'all') {
+      // Group by difficulty
+      const diffs = ['insane','hard','normal','easy'];
+      for (const diff of diffs) {
+        const diffEntries = entries.filter(e=>e.difficulty===diff);
+        if (!diffEntries.length) continue;
+        const diffColors = {easy:'#3dba6f',normal:'var(--gold-light)',hard:'#ff9860',insane:'#ff6060'};
+        const diffColor = diffColors[diff]||'var(--text-muted)';
+        const sectionTitle = document.createElement('div');
+        sectionTitle.className = 'lb-section-title';
+        sectionTitle.style.color = diffColor;
+        sectionTitle.textContent = diff.toUpperCase();
+        list.appendChild(sectionTitle);
+
+        diffEntries.forEach((entry, i) => {
+          list.appendChild(createLbRow(entry, i));
+        });
+      }
+    } else {
+      entries.forEach((entry, i) => {
+        list.appendChild(createLbRow(entry, i));
+      });
+    }
   } catch (e) {
     list.innerHTML = `<div class="lb-empty">${lang==='ko'?'불러오기 실패':'Failed to load'}</div>`;
   }
 }
 
-function showTitle() { showScreen('titleScreen'); applyLang(); }
+function createLbRow(entry, i) {
+  const row = document.createElement('div');
+  row.className = 'lb-row';
+  const rankClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
+  const rankIcon = i===0?'👑':i===1?'🥈':i===2?'🥉':`${i+1}`;
+  const date = new Date(entry.createdAt).toLocaleDateString(lang==='ko'?'ko-KR':'en-US',{month:'short',day:'numeric'});
+  row.innerHTML = `
+    <div class="lb-rank ${rankClass}">${rankIcon}</div>
+    <div class="lb-info">
+      <div class="lb-name">${entry.nickname}</div>
+      <div class="lb-meta">${date} · ${entry.points}P</div>
+    </div>
+    <div class="lb-round">Rd.${entry.round}</div>
+  `;
+  return row;
+}
+
+function showTitle() { G = null; showScreen('titleScreen'); applyLang(); }
 
 // ─────────────────────────────────────────────
 // LANGUAGE

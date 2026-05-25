@@ -54,12 +54,24 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET /api/leaderboard — Get top 10 entries sorted by points desc, then round desc
-export async function GET() {
+// GET /api/leaderboard — Get top entries sorted by round desc (then points desc)
+// ?difficulty=easy  — filter by difficulty
+// Without filter: returns up to 30 entries (for grouping by difficulty on frontend)
+// With filter: returns top 10 for that difficulty
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const difficulty = searchParams.get('difficulty')
+
+    const where = difficulty ? { difficulty } : {}
+
+    // Sort by round DESC first (primary), then points DESC (tiebreaker)
+    const take = difficulty ? 10 : 30
+
     const entries = await db.leaderboardEntry.findMany({
-      orderBy: [{ points: 'desc' }, { round: 'desc' }],
-      take: 10,
+      where,
+      orderBy: [{ round: 'desc' }, { points: 'desc' }],
+      take,
     })
 
     return NextResponse.json(entries)
