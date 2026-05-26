@@ -14,22 +14,22 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VIDA POKER",
+  title: "VIDA",
   description: "7-card poker roguelike - Survive, strategize, and conquer!",
-  keywords: ["VIDA POKER", "poker", "roguelike", "card game"],
+  keywords: ["VIDA", "VIDA POKER", "poker", "roguelike", "card game"],
   authors: [{ name: "VIDA" }],
   icons: {
     icon: "/favicon.svg",
   },
   openGraph: {
-    title: "VIDA POKER",
+    title: "VIDA",
     description: "7-card poker roguelike - Survive, strategize, and conquer!",
-    siteName: "VIDA POKER",
+    siteName: "VIDA",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "VIDA POKER",
+    title: "VIDA",
     description: "7-card poker roguelike - Survive, strategize, and conquer!",
   },
 };
