@@ -263,8 +263,8 @@ const STAGE_BACKGROUNDS = [
 function updateBackground() {
   if (!G) {
     document.body.style.background = '';
-    document.body::before;
-    const before = document.body.style;
+    let stageStyle = document.getElementById('stageStyle');
+    if (stageStyle) stageStyle.textContent = '';
     return;
   }
   const stage = VidaGame.getBackgroundStage(G);
