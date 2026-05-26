@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { nickname, points, round, difficulty } = body
+    const { nickname, points, round, difficulty, mode, life } = body
 
     if (!nickname || typeof nickname !== 'string' || nickname.trim().length === 0) {
       return NextResponse.json(
@@ -35,12 +35,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate mode — must be "normal" or "infinity", defaults to "normal"
+    const entryMode = mode ?? 'normal'
+    if (entryMode !== 'normal' && entryMode !== 'infinity') {
+      return NextResponse.json(
+        { error: 'Mode must be "normal" or "infinity"' },
+        { status: 400 }
+      )
+    }
+
+    // Validate life — must be a number, defaults to 0
+    const entryLife = life ?? 0
+    if (typeof entryLife !== 'number') {
+      return NextResponse.json(
+        { error: 'Life must be a number' },
+        { status: 400 }
+      )
+    }
+
     const entry = await db.leaderboardEntry.create({
       data: {
         nickname: nickname.trim(),
         points,
         round,
         difficulty: difficulty.trim(),
+        mode: entryMode,
+        life: entryLife,
       },
     })
 
@@ -54,24 +74,48 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET /api/leaderboard — Get top entries sorted by round desc (then points desc)
-// ?difficulty=easy  — filter by difficulty
-// Without filter: returns up to 30 entries (for grouping by difficulty on frontend)
-// With filter: returns top 10 for that difficulty
+// GET /api/leaderboard — Get top entries
+// ?difficulty=easy        — filter by difficulty
+// ?mode=normal            — filter by mode ("normal" or "infinity")
+// ?difficulty=easy&mode=normal — filter by both, top 10
+// Sorting: round DESC, then life DESC
+// No filters: group by difficulty, up to 10 per difficulty
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const difficulty = searchParams.get('difficulty')
+    const mode = searchParams.get('mode')
 
-    const where = difficulty ? { difficulty } : {}
+    // Build where clause
+    const where: Record<string, string> = {}
+    if (difficulty) where.difficulty = difficulty
+    if (mode) where.mode = mode
 
-    // Sort by round DESC first (primary), then points DESC (tiebreaker)
-    const take = difficulty ? 10 : 30
+    // When no filters at all, group by difficulty — fetch up to 10 per difficulty
+    if (!difficulty && !mode) {
+      const allEntries = await db.leaderboardEntry.findMany({
+        orderBy: [{ round: 'desc' }, { life: 'desc' }],
+      })
 
+      // Group by difficulty, take top 10 per group
+      const grouped: Record<string, typeof allEntries> = {}
+      for (const entry of allEntries) {
+        if (!grouped[entry.difficulty]) {
+          grouped[entry.difficulty] = []
+        }
+        if (grouped[entry.difficulty].length < 10) {
+          grouped[entry.difficulty].push(entry)
+        }
+      }
+
+      return NextResponse.json(grouped)
+    }
+
+    // Specific filter(s) — return top 10
     const entries = await db.leaderboardEntry.findMany({
       where,
-      orderBy: [{ round: 'desc' }, { points: 'desc' }],
-      take,
+      orderBy: [{ round: 'desc' }, { life: 'desc' }],
+      take: 10,
     })
 
     return NextResponse.json(entries)

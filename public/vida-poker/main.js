@@ -1,13 +1,16 @@
 /**
- * VIDA POKER — main.js  v3
+ * VIDA POKER — main.js  v4
  * All DOM / rendering / animation / sound. No game logic.
  *
- * v3 changes:
- *  - No result modal; multiplier breakdown shown as floating text during animation
- *  - Large "×N" total multiplier display after breakdown
- *  - Screen shake on settle/fold
- *  - preBet phase: bet before seeing cards
- *  - After animation + multiplier display, auto-transition to shop
+ * v4 changes:
+ *  - Point system removed
+ *  - Passive selection (choose 1 of 3) replaces shop
+ *  - Item selection (choose 1 of 3) replaces random grant
+ *  - Shop: buy items with Life
+ *  - Infinity mode + victory screen
+ *  - Background color stages
+ *  - All hardcoded Korean replaced with t() i18n
+ *  - Extra item slot support
  */
 
 // ─────────────────────────────────────────────
@@ -18,44 +21,56 @@ const UI_STRINGS = {
     title_sub:'ROGUELITE POKER',
     choose_difficulty:'Choose Difficulty',
     diff_easy:'EASY', diff_normal:'NORMAL', diff_hard:'HARD', diff_insane:'INSANE',
-    diff_easy_desc:'High drain · Moderate scaling',
+    diff_easy_desc:'Moderate drain · Slow growth',
     diff_normal_desc:'Recommended',
-    diff_hard_desc:'Steep scaling · Punishing reveals',
+    diff_hard_desc:'Steep growth · Punishing reveals',
     diff_insane_desc:'Survive if you can',
     btn_start:'▶  START GAME',
-    hud_life:'LIFE', hud_round:'ROUND', hud_points:'POINTS', hud_cost_label:'Drain',
+    btn_infinity:'∞ INFINITY',
+    hud_life:'LIFE', hud_round:'ROUND', hud_cost_label:'Drain',
     hud_field:'⬡  Field Cards', hud_hand:'✦  Your Hand',
     hud_expected:'Expected return', hud_passives:'Passives:',
     btn_reveal:'▶ Reveal Card',
     btn_settle:'Settle',
     btn_fold:'Fold',
     btn_item:'🎴 Item',
+    btn_extra_item:'💎 Extra',
     btn_bet_minus:'−',
     phase_prebet:(round)=>`Round ${round} — Place your bet`,
-    phase_betting:(round,revealed)=>
-      `Round ${round} — ${revealed}/5 revealed`,
+    phase_betting:(round,revealed)=>`Round ${round} — ${revealed}/5 revealed`,
     phase_processing:'Processing…',
     result_profit:'🎉 Profit!', result_loss:'📉 Loss', result_fold:'🏳 Fold',
     result_life_now:(l)=>`Life: ${l}♥`,
-    btn_next_shop:'Next: Passive Shop →',
-    shop_title:'⚗  Passive Shop', shop_points:'Points',
-    shop_subtitle:'Spend points to upgrade passives',
-    shop_cost:'Cost', shop_max:'MAX', shop_level:'Lv',
-    btn_shop_done:'Done → Next Round',
-    btn_deal:'🃏 Deal Cards',
     prebet_title:'Place Your Bet',
     prebet_info:'Set your wager before the cards are dealt.',
     prebet_locked:'Bet locked: ♥',
     item_title:'🎴 Use Item', item_subtitle:'Select target card',
     item_no_target:'Using…', btn_cancel:'Cancel',
     item_held:'Held Item', item_none:'No item',
-    item_next:(r)=>`Next item: Round ${r}`,
     go_title:'GAME OVER', go_sub:'Life depleted',
-    go_final_round:'Final Round', go_points:'Total Points', btn_home:'Back to Title',
+    go_final_round:'Final Round', go_life_label:'Remaining Life',
+    btn_home:'Back to Title',
     go_nickname_label:'Enter your nickname',
     go_submit:'Register', go_submit_success:'Score registered!', go_submit_error:'Registration failed',
     go_already_submitted:'Already registered',
-    lb_title:'🏆 LEADERBOARD', lb_subtitle:'Top 10 Players', lb_empty:'No records yet', lb_back:'← Back to Title',
+    victory_title:'🎉 VICTORY!', victory_sub:'You survived 100 rounds!',
+    victory_round_label:'Final Round', victory_life_label:'Remaining Life',
+    victory_nickname_label:'Enter your nickname',
+    victory_submit:'Register', victory_submit_success:'Score registered!', victory_submit_error:'Registration failed',
+    btn_infinity_continue:'Continue (Infinity Mode)',
+    btn_victory_home:'Back to Title',
+    lb_title:'🏆 LEADERBOARD', lb_subtitle:'Top Players by Round',
+    lb_empty:'No records yet', lb_back:'← Back to Title',
+    lb_loading:'Loading…', lb_error:'Failed to load',
+    passive_select_title:'Choose a Passive', passive_select_subtitle:'Pick one of three upgrades',
+    item_select_title:'Choose an Item', item_select_subtitle:'Pick one of three items',
+    shop_title:'🏪 Shop', shop_subtitle:'Buy items with Life',
+    shop_life_label:'Current Life', shop_skip:'Skip',
+    shop_extra_slot:'Extra Item Slot', shop_extra_occupied:'(Occupied — buying replaces it)',
+    lv_label:'Lv', drain_label:'Drain',
+    winnings_label:'Winnings', round_drain_label:'Round drain',
+    bet_half_recovered:'Half bet recovered', bet_lost_label:'Bet lost',
+    fold_label:'Fold', bet_held_label:'Bet held',
     notif_ace_max:'Cannot rank up an Ace!',
     notif_rank_min:'Already at minimum rank!',
     notif_need_two:'Need two hand cards!',
@@ -66,58 +81,69 @@ const UI_STRINGS = {
     notif_rankup:(a,b)=>`Rank: ${a}→${b}`,
     notif_rankdown:(a,b,c)=>`Rank: ${a}→${b} + drew ${c}`,
     notif_rankswap:'Hand ranks swapped!',
-    notif_passive_up:(n)=>`${n} upgraded!`,
-    notif_pts:(n)=>`+${n}P`,
-    notif_reveal_pen:(c)=>`Drain now ${c}♥`,
+    notif_passive_selected:'Passive acquired!',
+    notif_item_selected:'Item acquired!',
+    notif_shop_bought:'Item purchased!',
+    notif_not_enough_life:'Not enough Life!',
     notif_item_used:'Item used!',
-    mult_hand:(name)=>`${name}`,
-    mult_suit:(sym)=>`${sym} 보너스`,
-    mult_rank:'숫자 보너스',
-    mult_alchemy:'연금술사',
-    mult_highroller:'하이 롤러',
+    notif_reveal_pen:(c)=>`Drain now ${c}♥`,
+    extra_slot_label:'EXTRA ITEM',
+    item_slot_label:'HELD ITEM',
   },
   ko: {
     title_sub:'로그라이트 포커',
     choose_difficulty:'난이도 선택',
     diff_easy:'EASY', diff_normal:'NORMAL', diff_hard:'HARD', diff_insane:'INSANE',
-    diff_easy_desc:'높은 기본 차감 · 완만한 증가',
+    diff_easy_desc:'완만한 차감 · 느린 증가',
     diff_normal_desc:'추천',
     diff_hard_desc:'빠른 증가 · 공개 페널티 강화',
     diff_insane_desc:'살아남을 수 있다면',
     btn_start:'▶  게임 시작',
-    hud_life:'라이프', hud_round:'라운드', hud_points:'포인트', hud_cost_label:'차감',
+    btn_infinity:'∞ 인피니티',
+    hud_life:'라이프', hud_round:'라운드', hud_cost_label:'차감',
     hud_field:'⬡  필드 카드', hud_hand:'✦  내 패',
     hud_expected:'예상 수익', hud_passives:'패시브:',
     btn_reveal:'▶ 카드 공개',
     btn_settle:'정산하기',
     btn_fold:'폴드',
     btn_item:'🎴 아이템',
+    btn_extra_item:'💎 추가',
     btn_bet_minus:'−',
     phase_prebet:(round)=>`라운드 ${round} — 베팅하세요`,
-    phase_betting:(round,revealed)=>
-      `라운드 ${round} — 필드 ${revealed}/5 공개`,
+    phase_betting:(round,revealed)=>`라운드 ${round} — 필드 ${revealed}/5 공개`,
     phase_processing:'처리 중…',
     result_profit:'🎉 수익!', result_loss:'📉 손실', result_fold:'🏳 폴드',
     result_life_now:(l)=>`라이프: ${l}♥`,
-    btn_next_shop:'다음: 패시브 상점 →',
-    shop_title:'⚗  패시브 상점', shop_points:'포인트',
-    shop_subtitle:'포인트로 패시브를 업그레이드하세요',
-    shop_cost:'비용', shop_max:'MAX', shop_level:'Lv',
-    btn_shop_done:'완료 → 다음 라운드',
-    btn_deal:'🃏 카드 배분',
     prebet_title:'베팅하세요',
     prebet_info:'카드가 배분되기 전에 베팅액을 설정하세요.',
     prebet_locked:'베팅 확정: ♥',
     item_title:'🎴 아이템 사용', item_subtitle:'대상 카드를 선택하세요',
     item_no_target:'사용 중…', btn_cancel:'취소',
     item_held:'보유 아이템', item_none:'아이템 없음',
-    item_next:(r)=>`다음 아이템: ${r}라운드`,
     go_title:'GAME OVER', go_sub:'생명이 다했습니다',
-    go_final_round:'최종 라운드', go_points:'획득 포인트', btn_home:'처음으로',
+    go_final_round:'최종 라운드', go_life_label:'남은 라이프',
+    btn_home:'처음으로',
     go_nickname_label:'닉네임을 입력하세요',
     go_submit:'등록', go_submit_success:'점수가 등록되었습니다!', go_submit_error:'등록에 실패했습니다',
     go_already_submitted:'이미 등록되었습니다',
-    lb_title:'🏆 리더보드', lb_subtitle:'Top 10 플레이어', lb_empty:'기록이 없습니다', lb_back:'← 처음으로',
+    victory_title:'🎉 승리!', victory_sub:'100라운드를 생존했습니다!',
+    victory_round_label:'최종 라운드', victory_life_label:'남은 라이프',
+    victory_nickname_label:'닉네임을 입력하세요',
+    victory_submit:'등록', victory_submit_success:'점수가 등록되었습니다!', victory_submit_error:'등록에 실패했습니다',
+    btn_infinity_continue:'계속하기 (인피니티 모드)',
+    btn_victory_home:'처음으로',
+    lb_title:'🏆 리더보드', lb_subtitle:'라운드 순위',
+    lb_empty:'기록이 없습니다', lb_back:'← 처음으로',
+    lb_loading:'불러오는 중…', lb_error:'불러오기 실패',
+    passive_select_title:'패시브 선택', passive_select_subtitle:'세 가지 중 하나를 고르세요',
+    item_select_title:'아이템 선택', item_select_subtitle:'세 가지 중 하나를 고르세요',
+    shop_title:'🏪 상점', shop_subtitle:'라이프로 아이템 구매',
+    shop_life_label:'현재 라이프', shop_skip:'건너뛰기',
+    shop_extra_slot:'추가 아이템 칸', shop_extra_occupied:'(보유 중 — 구매 시 교체됨)',
+    lv_label:'Lv', drain_label:'차감',
+    winnings_label:'획득', round_drain_label:'라운드 차감',
+    bet_half_recovered:'베팅 절반 회수', bet_lost_label:'베팅 상실',
+    fold_label:'폴드', bet_held_label:'베팅 예치',
     notif_ace_max:'에이스는 올릴 수 없습니다!',
     notif_rank_min:'이미 최저 랭크입니다!',
     notif_need_two:'패 카드가 2장 필요합니다!',
@@ -128,15 +154,14 @@ const UI_STRINGS = {
     notif_rankup:(a,b)=>`랭크: ${a}→${b}`,
     notif_rankdown:(a,b,c)=>`랭크: ${a}→${b} + ${c} 드로우`,
     notif_rankswap:'패 랭크가 교환됐습니다!',
-    notif_passive_up:(n)=>`${n} 업그레이드!`,
-    notif_pts:(n)=>`+${n}P`,
-    notif_reveal_pen:(c)=>`차감량: ${c}♥`,
+    notif_passive_selected:'패시브 획득!',
+    notif_item_selected:'아이템 획득!',
+    notif_shop_bought:'아이템 구매!',
+    notif_not_enough_life:'라이프가 부족합니다!',
     notif_item_used:'아이템 사용!',
-    mult_hand:(name)=>`${name}`,
-    mult_suit:(sym)=>`${sym} 보너스`,
-    mult_rank:'숫자 보너스',
-    mult_alchemy:'연금술사',
-    mult_highroller:'하이 롤러',
+    notif_reveal_pen:(c)=>`차감량: ${c}♥`,
+    extra_slot_label:'추가 아이템',
+    item_slot_label:'보유 아이템',
   },
 };
 
@@ -147,8 +172,10 @@ let G    = null;
 let lang = 'en';
 let selectedDifficulty = 'normal';
 let pendingItemAction  = null;
+let pendingExtraItemAction = false;
 let isAnimating = false;
 let scoreSubmitted = false;
+let victoryScoreSubmitted = false;
 
 function t(key,...args) {
   const s=UI_STRINGS[lang]?.[key]??UI_STRINGS.en[key]??key;
@@ -198,6 +225,8 @@ function sfx(name, rarity='common') {
     case 'tick':    playTone(330,'sine',0.04,0.08); break;
     case 'mult':    playTone(520,'sine',0.08,0.12); break;
     case 'total':   playTone(660,'sine',0.15,0.2); playTone(880,'sine',0.12,0.18,0.12); break;
+    case 'select':  playTone(500,'triangle',0.1,0.15); playTone(650,'triangle',0.08,0.12,0.06); break;
+    case 'victory': playTone(523,'sine',0.2,0.2); playTone(659,'sine',0.15,0.18,0.15); playTone(784,'sine',0.15,0.18,0.3); break;
   }
 }
 
@@ -216,10 +245,44 @@ function screenShake(heavy=false) {
   const el = document.getElementById('gameScreen');
   if (!el) return;
   el.classList.remove('shaking','shaking-heavy');
-  // Force reflow
   void el.offsetWidth;
   el.classList.add(heavy ? 'shaking-heavy' : 'shaking');
   setTimeout(()=>el.classList.remove('shaking','shaking-heavy'), heavy ? 700 : 550);
+}
+
+// ─────────────────────────────────────────────
+// BACKGROUND STAGES
+// ─────────────────────────────────────────────
+const STAGE_BACKGROUNDS = [
+  'radial-gradient(ellipse at 15% 20%,rgba(80,40,180,0.17) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(180,40,80,0.13) 0%,transparent 50%)',
+  'radial-gradient(ellipse at 15% 20%,rgba(40,80,180,0.17) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(40,180,80,0.13) 0%,transparent 50%)',
+  'radial-gradient(ellipse at 15% 20%,rgba(40,180,80,0.17) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(180,180,40,0.13) 0%,transparent 50%)',
+  'radial-gradient(ellipse at 15% 20%,rgba(180,80,40,0.17) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(180,40,40,0.13) 0%,transparent 50%)',
+  'radial-gradient(ellipse at 15% 20%,rgba(180,40,180,0.17) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(40,180,180,0.13) 0%,transparent 50%)',
+];
+function updateBackground() {
+  if (!G) {
+    document.body.style.background = '';
+    document.body::before;
+    const before = document.body.style;
+    return;
+  }
+  const stage = VidaGame.getBackgroundStage(G);
+  const idx = Math.min(stage, STAGE_BACKGROUNDS.length - 1);
+  document.body.style.background = `var(--bg1)`;
+  document.body.style.setProperty('--stage-bg', STAGE_BACKGROUNDS[idx]);
+  // Apply via pseudo-element workaround: just set on body::before via a style tag
+  let stageStyle = document.getElementById('stageStyle');
+  if (!stageStyle) {
+    stageStyle = document.createElement('style');
+    stageStyle.id = 'stageStyle';
+    document.head.appendChild(stageStyle);
+  }
+  stageStyle.textContent = `body::before{background:${STAGE_BACKGROUNDS[idx]}!important;}`;
+}
+function resetBackground() {
+  let stageStyle = document.getElementById('stageStyle');
+  if (stageStyle) stageStyle.textContent = '';
 }
 
 // ─────────────────────────────────────────────
@@ -228,12 +291,207 @@ function screenShake(heavy=false) {
 function selectDifficulty(diff) {
   selectedDifficulty=diff;
   document.querySelectorAll('.diff-btn').forEach(b=>b.classList.toggle('selected',b.dataset.diff===diff));
+  updateInfinityButton();
 }
+
+function updateInfinityButton() {
+  const btn = document.getElementById('btnInfinity');
+  if (!btn) return;
+  const unlocked = localStorage.getItem('vida_infinity_'+selectedDifficulty);
+  btn.style.display = unlocked ? '' : 'none';
+}
+
 function startGame() {
   G=VidaGame.initGame({difficulty:selectedDifficulty, lang});
-  VidaGame.enterPreBet(G);
   showScreen('gameScreen');
+  updateBackground();
+  // Start with passive selection at round 1
+  processRoundTransition();
+}
+
+function startInfinityGame() {
+  G=VidaGame.initInfinityGame({difficulty:selectedDifficulty, lang});
+  showScreen('gameScreen');
+  updateBackground();
+  processRoundTransition();
+}
+
+// ─────────────────────────────────────────────
+// ROUND TRANSITION FLOW (v4)
+// After settle/fold → advanceRound → check game over / victory → passive → item → shop → preBet
+// ─────────────────────────────────────────────
+function processRoundTransition() {
+  // 1. Check game over
+  if (VidaGame.isGameOver(G)) { showGameOver(); return; }
+  // 2. Check victory
+  if (VidaGame.checkRoundCap(G) === 'victory') { showVictory(); return; }
+  // 3. Passive selection
+  if (VidaGame.shouldShowPassiveSelection(G)) {
+    showPassiveSelection();
+    return;
+  }
+  // 4. Item selection
+  if (VidaGame.shouldShowItemSelection(G)) {
+    showItemSelection();
+    return;
+  }
+  // 5. Shop
+  if (VidaGame.shouldShowShop(G) && G.round > 1) {
+    showShopModal();
+    return;
+  }
+  // 6. Enter preBet
+  VidaGame.enterPreBet(G);
+  updateBackground();
   renderAll();
+}
+
+function afterPassiveSelected() {
+  // Check item selection next
+  if (VidaGame.shouldShowItemSelection(G)) {
+    showItemSelection();
+    return;
+  }
+  afterItemSelected();
+}
+
+function afterItemSelected() {
+  // Check shop next
+  if (VidaGame.shouldShowShop(G) && G.round > 1) {
+    showShopModal();
+    return;
+  }
+  afterShopDone();
+}
+
+function afterShopDone() {
+  VidaGame.enterPreBet(G);
+  updateBackground();
+  renderAll();
+}
+
+// ─────────────────────────────────────────────
+// PASSIVE SELECTION MODAL
+// ─────────────────────────────────────────────
+function showPassiveSelection() {
+  const offers = VidaGame.generatePassiveOffers(G);
+  if (!offers.length) { afterPassiveSelected(); return; }
+  document.getElementById('passiveSelectTitle').textContent = t('passive_select_title');
+  document.getElementById('passiveSelectSubtitle').textContent = t('passive_select_subtitle');
+  const grid = document.getElementById('passiveOfferGrid');
+  grid.innerHTML = '';
+  for (const offer of offers) {
+    const card = document.createElement('div');
+    card.className = 'offer-card';
+    const name = offer.nameI18n[lang] || offer.nameI18n.en;
+    card.innerHTML = `
+      <div class="offer-name">${name}</div>
+      <div class="offer-desc">${offer.nextDesc}</div>
+      <div class="offer-level">${t('lv_label')} ${offer.currentLv} → ${offer.currentLv+1}</div>
+    `;
+    card.onclick = () => {
+      const res = VidaGame.selectPassive(G, offer.id);
+      if (res.ok) {
+        sfx('select');
+        notify(t('notif_passive_selected'),'notif-gold');
+        document.getElementById('passiveSelectionModal').classList.add('hidden');
+        afterPassiveSelected();
+      }
+    };
+    grid.appendChild(card);
+  }
+  document.getElementById('passiveSelectionModal').classList.remove('hidden');
+}
+
+// ─────────────────────────────────────────────
+// ITEM SELECTION MODAL
+// ─────────────────────────────────────────────
+function showItemSelection() {
+  const offers = VidaGame.generateItemOffers(G);
+  document.getElementById('itemSelectTitle').textContent = t('item_select_title');
+  document.getElementById('itemSelectSubtitle').textContent = t('item_select_subtitle');
+  const grid = document.getElementById('itemOfferGrid');
+  grid.innerHTML = '';
+  for (const offer of offers) {
+    const card = document.createElement('div');
+    card.className = 'offer-card';
+    const name = offer.nameI18n[lang] || offer.nameI18n.en;
+    const desc = (offer.descI18n[lang] || offer.descI18n.en);
+    card.innerHTML = `
+      <div class="offer-name">${name}</div>
+      <div class="offer-desc">${desc}</div>
+    `;
+    card.onclick = () => {
+      const res = VidaGame.selectItem(G, offer.id);
+      if (res.ok) {
+        sfx('select');
+        notify(t('notif_item_selected'),'notif-gold');
+        document.getElementById('itemSelectionModal').classList.add('hidden');
+        afterItemSelected();
+      }
+    };
+    grid.appendChild(card);
+  }
+  document.getElementById('itemSelectionModal').classList.remove('hidden');
+}
+
+// ─────────────────────────────────────────────
+// SHOP MODAL (buy with Life)
+// ─────────────────────────────────────────────
+function showShopModal() {
+  const offers = VidaGame.generateShopOffers(G);
+  document.getElementById('shopTitle').textContent = t('shop_title');
+  document.getElementById('shopSubtitle').textContent = t('shop_subtitle');
+  document.getElementById('shopLifeLabel').textContent = t('shop_life_label');
+  document.getElementById('shopLifeVal').textContent = G.life.toFixed(1);
+  document.getElementById('btnShopSkip').textContent = t('shop_skip');
+
+  // Show extra slot info
+  const extraInfo = document.getElementById('shopExtraSlotInfo');
+  if (G.extraItemSlot) {
+    const def = VidaGame.getItemDef(G.extraItemSlot);
+    const extraName = def ? (def.nameI18n[lang] || def.nameI18n.en) : G.extraItemSlot;
+    extraInfo.textContent = `${t('shop_extra_slot')}: ${extraName} ${t('shop_extra_occupied')}`;
+    extraInfo.style.color = 'var(--orange)';
+  } else {
+    extraInfo.textContent = `${t('shop_extra_slot')}: —`;
+    extraInfo.style.color = 'var(--text-muted)';
+  }
+
+  const grid = document.getElementById('shopOfferGrid');
+  grid.innerHTML = '';
+  for (const offer of offers) {
+    const card = document.createElement('div');
+    const canBuy = G.life >= offer.lifeCost;
+    card.className = 'offer-card' + (canBuy ? '' : ' disabled');
+    const name = offer.nameI18n[lang] || offer.nameI18n.en;
+    const desc = (offer.descI18n[lang] || offer.descI18n.en);
+    card.innerHTML = `
+      <div class="offer-name">${name}</div>
+      <div class="offer-desc">${desc}</div>
+      <div class="offer-cost">♥ ${offer.lifeCost}</div>
+    `;
+    if (canBuy) {
+      card.onclick = () => {
+        const res = VidaGame.buyShopItem(G, offer.id);
+        if (res.ok) {
+          sfx('shop');
+          notify(t('notif_shop_bought'),'notif-gold');
+          document.getElementById('shopModal').classList.add('hidden');
+          afterShopDone();
+        } else {
+          notify(t('notif_not_enough_life'),'notif-red');
+        }
+      };
+    }
+    grid.appendChild(card);
+  }
+  document.getElementById('shopModal').classList.remove('hidden');
+}
+
+function closeShopModal() {
+  document.getElementById('shopModal').classList.add('hidden');
+  afterShopDone();
 }
 
 // ─────────────────────────────────────────────
@@ -243,22 +501,15 @@ function confirmBetAndDeal() {
   if (!G||G.phase!=='preBet') return;
   const prevLife = G.life;
   if (!VidaGame.confirmBetAndDeal(G)) return;
-
-  // Animate the bet deduction
-  sfx('fold'); // deduction sound
+  sfx('fold');
   animateLifeChange(prevLife, G.life);
   renderAll();
-
-  // Animate initial card reveals after a short delay
   setTimeout(()=>{
-    sfx('reveal');
-    sfx('reveal');
-    // Hand card reveals
+    sfx('reveal'); sfx('reveal');
     const handEls = [...document.querySelectorAll('#handCards .card')];
     handEls.forEach((el,i)=>{
       setTimeout(()=>{ el.classList.add('card-reveal'); setTimeout(()=>el.classList.remove('card-reveal'),500); }, i*150);
     });
-    // Field card reveals
     const fieldEls = [...document.querySelectorAll('#fieldCards .card')];
     fieldEls.forEach((el,i)=>{
       if (i < G.revealedCount) {
@@ -282,7 +533,7 @@ function revealNext() {
 }
 
 // ─────────────────────────────────────────────
-// BETTING (adjust bet — only during preBet)
+// BETTING (adjust bet)
 // ─────────────────────────────────────────────
 function adjustBet(mode) {
   if (!G) return;
@@ -291,39 +542,25 @@ function adjustBet(mode) {
 }
 
 // ─────────────────────────────────────────────
-// SETTLE (placeBet)
+// SETTLE
 // ─────────────────────────────────────────────
 function settle() {
   if (!G||G.phase!=='betting'||isAnimating) return;
-
-  // 1. Compute result before mutating
   const preview = VidaGame.computeReturn(G);
-
-  // 2. Run animation sequence, THEN apply result
   isAnimating = true;
   runHandAnimation(preview, ()=>{
     const result = VidaGame.placeBet(G);
     renderAll();
-
-    // Screen shake
     const isHeavy = ['epic','legendary'].includes(result.rarity);
     screenShake(isHeavy);
-
-    // Show multiplier breakdown + total
     showMultiplierBreakdown(result, ()=>{
-      // Animate life change
       const prev=+(G.life-result.netGain).toFixed(2);
       animateLifeChange(prev, G.life);
-
       isAnimating = false;
-
-      // After delay, go to shop
       setTimeout(()=>{
         if (VidaGame.isGameOver(G)) { showGameOver(); return; }
-        const pts=VidaGame.advanceRound(G);
-        notify(t('notif_pts',pts),'notif-gold');
-        sfx('shop');
-        openShop();
+        VidaGame.advanceRound(G);
+        processRoundTransition();
       }, 1200);
     });
   });
@@ -345,26 +582,21 @@ function runHandAnimation(preview, onDone) {
   const color   = RARITY_COLORS[rarity]||'#aaffaa';
   const all     = VidaGame.getAllCards(G);
   const indices = preview.contributingIndices;
-
   const handEls  = [...document.querySelectorAll('#handCards .card')];
   const fieldEls = [...document.querySelectorAll('#fieldCards .card')];
   const allCardEls = [...handEls, ...fieldEls];
 
   function getEl(idx) {
     if (idx < G.handCards.length) return handEls[idx];
-    const fi = idx - G.handCards.length;
-    return fieldEls[fi];
+    return fieldEls[idx - G.handCards.length];
   }
 
   const isSequential = (preview.key==='straight'||preview.key==='straightFlush');
-
   sfx('hand_reveal', rarity);
 
-  // Step 1: dim non-contributing cards
   allCardEls.forEach(el=>{ el.style.opacity='0.3'; el.style.transition='opacity 0.3s'; });
   indices.forEach(i=>{ const el=getEl(i); if(el){ el.style.opacity='1'; } });
 
-  // Step 2: highlight contributing cards
   const delay = isSequential ? 120 : 0;
   indices.forEach((i,order)=>{
     const el=getEl(i);
@@ -379,7 +611,6 @@ function runHandAnimation(preview, onDone) {
     }, order*(isSequential?delay:40));
   });
 
-  // Step 3: rarity flash overlay
   const totalDelay = isSequential ? indices.length*delay : 200;
   setTimeout(()=>{
     const overlay=document.getElementById('handFlashOverlay');
@@ -390,12 +621,10 @@ function runHandAnimation(preview, onDone) {
     }
   }, totalDelay+80);
 
-  // Step 4: show hand label badge
   setTimeout(()=>{
     showHandBadge(preview.key, rarity, color);
   }, totalDelay+120);
 
-  // Step 5: reset cards and call done
   setTimeout(()=>{
     allCardEls.forEach(el=>{
       el.style.opacity=''; el.style.boxShadow='';
@@ -430,7 +659,6 @@ function showMultiplierBreakdown(result, onDone) {
 
   const breakdown = result.breakdown || [];
   if (breakdown.length === 0 && result.type === 'fold') {
-    // For fold, just show a quick message
     totalEl.textContent = '×0';
     totalEl.querySelector('.mult-label')?.remove();
     const label = document.createElement('span');
@@ -439,10 +667,7 @@ function showMultiplierBreakdown(result, onDone) {
     totalEl.appendChild(label);
     totalEl.classList.add('visible');
     sfx('fold');
-    setTimeout(()=>{
-      totalEl.classList.remove('visible');
-      if (onDone) onDone();
-    }, 1000);
+    setTimeout(()=>{ totalEl.classList.remove('visible'); if (onDone) onDone(); }, 1000);
     return;
   }
 
@@ -457,9 +682,7 @@ function showMultiplierBreakdown(result, onDone) {
       else if (item.isRankBonus) cls += 'rank';
       else if (item.isPassive) cls += 'passive';
       else cls += 'hand';
-
       line.className = cls;
-
       const displayLabel = item.isSuitBonus && item.suitName ? item.suitName : item.label;
       line.textContent = `×${item.value.toFixed(2)} (${displayLabel})`;
       wrap.appendChild(line);
@@ -468,32 +691,29 @@ function showMultiplierBreakdown(result, onDone) {
     delay += BASE_DELAY;
   });
 
-  // Show "Winnings" line (bet * mult)
   if (result.lifeGain > 0) {
     setTimeout(()=>{
       const line = document.createElement('div');
       line.className = 'mult-line suit';
       line.style.color = '#6eff90';
-      line.textContent = `+${result.lifeGain.toFixed(1)}♥ (${lang==='ko'?'획득':'Winnings'})`;
+      line.textContent = `+${result.lifeGain.toFixed(1)}♥ (${t('winnings_label')})`;
       wrap.appendChild(line);
       sfx('mult');
     }, delay);
     delay += BASE_DELAY;
   }
 
-  // Show round cost drain
   if (result.lifeCost > 0) {
     setTimeout(()=>{
       const line = document.createElement('div');
       line.className = 'mult-line hand';
       line.style.color = '#ff7070';
-      line.textContent = `−${result.lifeCost.toFixed(1)}♥ (라운드 차감)`;
+      line.textContent = `−${result.lifeCost.toFixed(1)}♥ (${t('round_drain_label')})`;
       wrap.appendChild(line);
     }, delay);
     delay += BASE_DELAY;
   }
 
-  // After all breakdown items, show the total
   setTimeout(()=>{
     totalEl.textContent = `×${result.mult.toFixed(2)}`;
     totalEl.querySelector('.mult-label')?.remove();
@@ -505,13 +725,10 @@ function showMultiplierBreakdown(result, onDone) {
     totalEl.classList.add('visible');
     totalEl.style.color = '';
     sfx('total');
-
-    // Screen shake for big multipliers
     if (result.mult >= 3.0) screenShake(true);
     else if (result.mult >= 1.5) screenShake(false);
   }, delay + 200);
 
-  // Hide everything and call onDone
   const totalDuration = delay + 200 + 1800;
   setTimeout(()=>{
     wrap.innerHTML = '';
@@ -529,53 +746,48 @@ function showFoldDisplay(result, onDone) {
   wrap.innerHTML = '';
   totalEl.classList.remove('visible');
 
-  // Show bet recovery and drain
   let delay = 0;
   const BASE_DELAY = 400;
 
-  // Show "Half bet recovered"
   if (result.betRecovered > 0) {
     setTimeout(()=>{
       const line = document.createElement('div');
       line.className = 'mult-line passive';
-      line.textContent = `+${result.betRecovered.toFixed(1)}♥ (베팅 절반 회수)`;
+      line.textContent = `+${result.betRecovered.toFixed(1)}♥ (${t('bet_half_recovered')})`;
       wrap.appendChild(line);
       sfx('mult');
     }, delay);
     delay += BASE_DELAY;
   }
 
-  // Show "Bet lost"
   if (result.betLost > 0) {
     setTimeout(()=>{
       const line = document.createElement('div');
       line.className = 'mult-line hand';
       line.style.color = '#ff7070';
-      line.textContent = `−${result.betLost.toFixed(1)}♥ (베팅 상실)`;
+      line.textContent = `−${result.betLost.toFixed(1)}♥ (${t('bet_lost_label')})`;
       wrap.appendChild(line);
     }, delay);
     delay += BASE_DELAY;
   }
 
-  // Show round cost
   if (result.lifeCost > 0) {
     setTimeout(()=>{
       const line = document.createElement('div');
       line.className = 'mult-line hand';
       line.style.color = '#ff7070';
-      line.textContent = `−${result.lifeCost.toFixed(1)}♥ (라운드 차감)`;
+      line.textContent = `−${result.lifeCost.toFixed(1)}♥ (${t('round_drain_label')})`;
       wrap.appendChild(line);
     }, delay);
     delay += BASE_DELAY;
   }
 
-  // Show total net
   setTimeout(()=>{
     totalEl.textContent = result.netGain >= 0 ? `+${result.netGain.toFixed(1)}` : result.netGain.toFixed(1);
     totalEl.querySelector('.mult-label')?.remove();
     const label = document.createElement('span');
     label.className = 'mult-label';
-    label.textContent = '🏳 폴드';
+    label.textContent = `🏳 ${t('fold_label')}`;
     totalEl.appendChild(label);
     totalEl.style.color = result.netGain >= 0 ? 'var(--green)' : 'var(--red)';
     totalEl.classList.add('visible');
@@ -651,65 +863,15 @@ function foldRound() {
   const prev=+(G.life-result.netGain).toFixed(2);
   renderAll();
 
-  // Show fold display (half bet recovered)
   showFoldDisplay(result, ()=>{
     animateLifeChange(prev, G.life);
     isAnimating = false;
-
     setTimeout(()=>{
       if (VidaGame.isGameOver(G)) { showGameOver(); return; }
-      const pts=VidaGame.advanceRound(G);
-      notify(t('notif_pts',pts),'notif-gold');
-      sfx('shop');
-      openShop();
+      VidaGame.advanceRound(G);
+      processRoundTransition();
     }, 800);
   });
-}
-
-// ─────────────────────────────────────────────
-// SHOP
-// ─────────────────────────────────────────────
-function openShop() { renderShop(); document.getElementById('shopModal').classList.remove('hidden'); }
-
-function renderShop() {
-  document.getElementById('shopPointsVal').textContent = G.totalPoints;
-  document.getElementById('shopTitle').textContent     = t('shop_title');
-  document.getElementById('shopSubtitle').textContent  = t('shop_subtitle');
-  document.getElementById('btnShopDone').textContent   = t('btn_shop_done');
-  const grid=document.getElementById('passiveGrid');
-  grid.innerHTML='';
-  for (const def of VidaGame.PASSIVE_DEFS) {
-    const lv=G.passives[def.id]||0;
-    const isMaxed=lv>=def.maxLv;
-    const cost=isMaxed?null:def.costs[lv];
-    const canBuy=!isMaxed&&G.totalPoints>=cost;
-    const card=document.createElement('div');
-    card.className='passive-card'+(lv>0?' owned':'')+(isMaxed?' maxed':'')+(canBuy?' buyable':'');
-    const dots=Array.from({length:def.maxLv},(_,i)=>`<span class="pl-dot ${i<lv?'filled':''}"></span>`).join('');
-    const name=def.nameI18n[lang]||def.nameI18n.en;
-    const descArr=def.descI18n[lang]||def.descI18n.en;
-    const desc=descArr[Math.max(0,lv-1)]||descArr[0];
-    card.innerHTML=`
-      <div class="passive-name">${name}</div>
-      <div class="passive-desc">${desc}</div>
-      ${!isMaxed?`<div class="passive-cost">${t('shop_cost')}: ${cost}P`
-               +`<span class="next-level-preview"> → ${descArr[lv]||''}</span></div>`
-               :`<div class="passive-cost" style="color:var(--purple);">${t('shop_max')}</div>`}
-      <div class="passive-level">${dots}</div>`;
-    if (canBuy) {
-      card.onclick=()=>{
-        const res=VidaGame.buyPassive(G,def.id);
-        if (res.ok) { sfx('item'); notify(t('notif_passive_up',name),'notif-gold'); renderShop(); }
-      };
-    }
-    grid.appendChild(card);
-  }
-}
-
-function closeShop() {
-  document.getElementById('shopModal').classList.add('hidden');
-  VidaGame.enterPreBet(G);
-  renderAll();
 }
 
 // ─────────────────────────────────────────────
@@ -727,6 +889,8 @@ function openItemModal() {
     return;
   }
 
+  pendingItemAction = false;
+  pendingExtraItemAction = false;
   document.getElementById('itemTitle').textContent    = def.nameI18n[lang]||def.nameI18n.en;
   document.getElementById('itemSubtitle').textContent = def.descI18n[lang]||def.descI18n.en;
 
@@ -740,6 +904,41 @@ function openItemModal() {
     el.onclick=()=>{
       document.getElementById('cardTargetModal').classList.add('hidden');
       const res=VidaGame.useItem(G,c._idx);
+      handleItemResult(res,def);
+      renderAll();
+    };
+    list.appendChild(el);
+  }
+  document.getElementById('cancelCardBtn').textContent=t('btn_cancel');
+  document.getElementById('cardTargetModal').classList.remove('hidden');
+}
+
+function openExtraItemModal() {
+  if (!G.extraItemSlot||G.extraItemUsedThisRound) return;
+  const def=VidaGame.getItemDef(G.extraItemSlot);
+  if (!def) return;
+
+  if (def.targetPool===null) {
+    const res=VidaGame.useExtraItem(G,-1);
+    handleItemResult(res,def);
+    renderAll();
+    return;
+  }
+
+  pendingExtraItemAction = true;
+  document.getElementById('itemTitle').textContent    = def.nameI18n[lang]||def.nameI18n.en;
+  document.getElementById('itemSubtitle').textContent = def.descI18n[lang]||def.descI18n.en;
+
+  const targets=VidaGame.getItemTargets(G,G.extraItemSlot);
+  const list=document.getElementById('cardTargetList');
+  list.innerHTML='';
+  for (const c of targets) {
+    const el=makeCardEl(c);
+    el.style.cursor='pointer';
+    el.classList.add('card-selectable');
+    el.onclick=()=>{
+      document.getElementById('cardTargetModal').classList.add('hidden');
+      const res=VidaGame.useExtraItem(G,c._idx);
       handleItemResult(res,def);
       renderAll();
     };
@@ -780,9 +979,9 @@ function showGameOver() {
   document.getElementById('goTitle').textContent      =t('go_title');
   document.getElementById('goSub').textContent        =t('go_sub');
   document.getElementById('goFinalRoundLabel').textContent=t('go_final_round');
-  document.getElementById('goPointsLabel').textContent    =t('go_points');
+  document.getElementById('goLifeLabel').textContent   =t('go_life_label');
   document.getElementById('finalRound').textContent   =G.round;
-  document.getElementById('finalPoints').textContent  =G.totalPoints;
+  document.getElementById('finalLife').textContent    =G.life.toFixed(1);
   document.getElementById('goNicknameLabel').textContent=t('go_nickname_label');
   document.getElementById('btnSubmitScore').textContent=t('go_submit');
   document.getElementById('goNicknameInput').value='';
@@ -790,6 +989,7 @@ function showGameOver() {
   document.getElementById('goNicknameSection').style.display='block';
   document.getElementById('btnSubmitScore').disabled=false;
   document.getElementById('btnHome').textContent      =t('btn_home');
+  resetBackground();
   showScreen('gameOverScreen');
 }
 
@@ -811,9 +1011,11 @@ async function submitScore() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nickname,
-        points: G.totalPoints,
+        points: 0,
         round: G.round,
         difficulty: G.settings.difficulty,
+        mode: G.infinityMode ? 'infinity' : 'normal',
+        life: +G.life.toFixed(1),
       }),
     });
     if (res.ok) {
@@ -833,13 +1035,93 @@ async function submitScore() {
   }
 }
 
+// ─────────────────────────────────────────────
+// VICTORY
+// ─────────────────────────────────────────────
+function showVictory() {
+  victoryScoreSubmitted = false;
+  // Unlock infinity mode for this difficulty
+  localStorage.setItem('vida_infinity_'+G.settings.difficulty, 'true');
+
+  document.getElementById('victoryTitle').textContent = t('victory_title');
+  document.getElementById('victorySub').textContent   = t('victory_sub');
+  document.getElementById('victoryRoundLabel').textContent = t('victory_round_label');
+  document.getElementById('victoryLifeLabel').textContent  = t('victory_life_label');
+  document.getElementById('victoryRound').textContent  = G.round;
+  document.getElementById('victoryLife').textContent   = G.life.toFixed(1);
+  document.getElementById('victoryNicknameLabel').textContent = t('victory_nickname_label');
+  document.getElementById('btnVictorySubmit').textContent = t('victory_submit');
+  document.getElementById('btnInfinityContinue').textContent = t('btn_infinity_continue');
+  document.getElementById('btnVictoryHome').textContent = t('btn_victory_home');
+  document.getElementById('victoryNicknameInput').value = '';
+  document.getElementById('victorySubmitStatus').textContent = '';
+  document.getElementById('victoryNicknameSection').style.display = 'block';
+  document.getElementById('btnVictorySubmit').disabled = false;
+
+  sfx('victory');
+  resetBackground();
+  showScreen('victoryScreen');
+}
+
+async function submitVictoryScore() {
+  if (victoryScoreSubmitted || !G) return;
+  const nickname = document.getElementById('victoryNicknameInput').value.trim();
+  if (!nickname) {
+    document.getElementById('victorySubmitStatus').textContent = lang==='ko'?'닉네임을 입력해주세요':'Please enter a nickname';
+    document.getElementById('victorySubmitStatus').style.color = 'var(--red)';
+    return;
+  }
+  const btn = document.getElementById('btnVictorySubmit');
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  try {
+    const res = await fetch('/api/leaderboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nickname,
+        points: 0,
+        round: G.round,
+        difficulty: G.settings.difficulty,
+        mode: 'normal',
+        life: +G.life.toFixed(1),
+      }),
+    });
+    if (res.ok) {
+      victoryScoreSubmitted = true;
+      document.getElementById('victorySubmitStatus').textContent = t('victory_submit_success');
+      document.getElementById('victorySubmitStatus').style.color = 'var(--green)';
+      btn.textContent = '✓';
+      sfx('total');
+    } else {
+      throw new Error('Failed');
+    }
+  } catch (e) {
+    document.getElementById('victorySubmitStatus').textContent = t('victory_submit_error');
+    document.getElementById('victorySubmitStatus').style.color = 'var(--red)';
+    btn.disabled = false;
+    btn.textContent = t('victory_submit');
+  }
+}
+
+function continueInfinity() {
+  G.infinityMode = true;
+  VidaGame.enterPreBet(G);
+  updateBackground();
+  showScreen('gameScreen');
+  renderAll();
+}
+
+// ─────────────────────────────────────────────
+// LEADERBOARD
+// ─────────────────────────────────────────────
 let currentLbTab = 'all';
 
 async function showLeaderboardScreen() {
   currentLbTab = 'all';
   showScreen('leaderboardScreen');
   document.getElementById('lbSubtitle').textContent = lang==='ko'?'라운드 순위':'Top Players by Round';
-  // Reset tab active state
   document.querySelectorAll('.lb-tab').forEach(t=>t.classList.toggle('active',t.dataset.diff==='all'));
   await loadLeaderboard();
 }
@@ -852,25 +1134,34 @@ function switchLbTab(diff) {
 
 async function loadLeaderboard() {
   const list = document.getElementById('leaderboardList');
-  list.innerHTML = `<div class="lb-empty">${lang==='ko'?'불러오는 중…':'Loading…'}</div>`;
+  list.innerHTML = `<div class="lb-empty">${t('lb_loading')}</div>`;
 
   try {
-    const url = currentLbTab === 'all' ? '/api/leaderboard' : `/api/leaderboard?difficulty=${currentLbTab}`;
+    let url = '/api/leaderboard';
+    const params = [];
+    if (currentLbTab !== 'all') {
+      if (currentLbTab === 'infinity') {
+        params.push('mode=infinity');
+      } else {
+        params.push(`difficulty=${currentLbTab}`);
+      }
+    }
+    if (params.length) url += '?' + params.join('&');
+
     const res = await fetch(url);
-    const entries = await res.json();
+    const data = await res.json();
     list.innerHTML = '';
 
-    if (!entries.length) {
-      list.innerHTML = `<div class="lb-empty">${t('lb_empty')}</div>`;
-      return;
-    }
-
-    if (currentLbTab === 'all') {
-      // Group by difficulty
+    // Handle both object (grouped) and array responses
+    let entries;
+    if (Array.isArray(data)) {
+      entries = data;
+    } else if (typeof data === 'object' && data !== null) {
+      // Grouped by difficulty
       const diffs = ['insane','hard','normal','easy'];
       for (const diff of diffs) {
-        const diffEntries = entries.filter(e=>e.difficulty===diff);
-        if (!diffEntries.length) continue;
+        const diffEntries = data[diff];
+        if (!diffEntries || !diffEntries.length) continue;
         const diffColors = {easy:'#3dba6f',normal:'var(--gold-light)',hard:'#ff9860',insane:'#ff6060'};
         const diffColor = diffColors[diff]||'var(--text-muted)';
         const sectionTitle = document.createElement('div');
@@ -878,18 +1169,23 @@ async function loadLeaderboard() {
         sectionTitle.style.color = diffColor;
         sectionTitle.textContent = diff.toUpperCase();
         list.appendChild(sectionTitle);
-
         diffEntries.forEach((entry, i) => {
           list.appendChild(createLbRow(entry, i));
         });
       }
-    } else {
-      entries.forEach((entry, i) => {
-        list.appendChild(createLbRow(entry, i));
-      });
+      return;
     }
+
+    if (!entries.length) {
+      list.innerHTML = `<div class="lb-empty">${t('lb_empty')}</div>`;
+      return;
+    }
+
+    entries.forEach((entry, i) => {
+      list.appendChild(createLbRow(entry, i));
+    });
   } catch (e) {
-    list.innerHTML = `<div class="lb-empty">${lang==='ko'?'불러오기 실패':'Failed to load'}</div>`;
+    list.innerHTML = `<div class="lb-empty">${t('lb_error')}</div>`;
   }
 }
 
@@ -899,11 +1195,13 @@ function createLbRow(entry, i) {
   const rankClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
   const rankIcon = i===0?'👑':i===1?'🥈':i===2?'🥉':`${i+1}`;
   const date = new Date(entry.createdAt).toLocaleDateString(lang==='ko'?'ko-KR':'en-US',{month:'short',day:'numeric'});
+  const lifeStr = entry.life != null ? ` · ${entry.life}♥` : '';
+  const modeStr = entry.mode === 'infinity' ? ' ∞' : '';
   row.innerHTML = `
     <div class="lb-rank ${rankClass}">${rankIcon}</div>
     <div class="lb-info">
       <div class="lb-name">${entry.nickname}</div>
-      <div class="lb-meta">${date} · ${entry.points}P</div>
+      <div class="lb-meta">${date}${lifeStr}${modeStr}</div>
     </div>
     <div class="lb-round">Rd.${entry.round}</div>
   `;
@@ -911,20 +1209,22 @@ function createLbRow(entry, i) {
 }
 
 function showTitle() {
-  // Full state reset to prevent stale game UI leaking
   G = null;
   isAnimating = false;
   scoreSubmitted = false;
-  // Hide any open modals
+  victoryScoreSubmitted = false;
   document.getElementById('shopModal')?.classList.add('hidden');
   document.getElementById('cardTargetModal')?.classList.add('hidden');
-  // Clear floating displays
+  document.getElementById('passiveSelectionModal')?.classList.add('hidden');
+  document.getElementById('itemSelectionModal')?.classList.add('hidden');
   const mbw = document.getElementById('multBreakdownWrap');
   if (mbw) mbw.innerHTML = '';
   const mtd = document.getElementById('multTotalDisplay');
   if (mtd) mtd.classList.remove('visible');
+  resetBackground();
   showScreen('titleScreen');
   applyLang();
+  updateInfinityButton();
 }
 
 // ─────────────────────────────────────────────
@@ -940,6 +1240,8 @@ function applyLang() {
   document.getElementById('titleSub').textContent        =t('title_sub');
   document.getElementById('diffChooseLabel').textContent =t('choose_difficulty');
   document.getElementById('btnStartGame').textContent    =t('btn_start');
+  const infBtn = document.getElementById('btnInfinity');
+  if (infBtn) infBtn.textContent = t('btn_infinity');
   ['easy','normal','hard','insane'].forEach(d=>{
     const btn=document.querySelector(`.diff-btn[data-diff="${d}"]`);
     if (btn) {
@@ -961,25 +1263,23 @@ function renderAll() {
   renderButtons();
   renderPassiveChips();
   renderItemSlot();
+  renderExtraItemSlot();
   renderGameLog();
 }
 
 function renderStats() {
-  // During betting phase, life already has bet deducted; show "available" life
   const displayLife = G.life;
   document.getElementById('lifeDisplay').textContent  =displayLife.toFixed(1);
   document.getElementById('roundDisplay').textContent =G.round;
-  document.getElementById('pointDisplay').textContent =G.totalPoints;
   document.getElementById('roundCostDisplay').textContent=`−${G.roundCost}`;
   document.getElementById('hudLifeLabel').textContent  =t('hud_life');
   document.getElementById('hudRoundLabel').textContent =t('hud_round');
-  document.getElementById('hudPointsLabel').textContent=t('hud_points');
   document.getElementById('hudCostLabel').textContent  =t('hud_cost_label');
   const pct=Math.min(100,(displayLife/G.maxLife)*100);
   document.getElementById('lifeBarFill').style.width=pct+'%';
   document.getElementById('lifeBarText').textContent=`${displayLife.toFixed(1)} / ${G.maxLife}`;
 
-  // Show bet held indicator during betting phase
+  // Bet held indicator
   const lifeBarWrap = document.querySelector('.life-bar-wrap');
   if (lifeBarWrap) {
     let betHeldEl = document.getElementById('betHeldIndicator');
@@ -990,7 +1290,7 @@ function renderStats() {
         betHeldEl.style.cssText = 'font-size:.68rem;color:var(--gold-light);margin-top:.15rem;';
         lifeBarWrap.appendChild(betHeldEl);
       }
-      betHeldEl.textContent = `🎰 베팅 예치: ${G.betHeld.toFixed(1)}♥`;
+      betHeldEl.textContent = `🎰 ${t('bet_held_label')}: ${G.betHeld.toFixed(1)}♥`;
     } else if (betHeldEl) {
       betHeldEl.remove();
     }
@@ -1005,127 +1305,115 @@ function renderPreBetBar() {
   const maxBet=G.life;
   const minBet=Math.min(baseBet, maxBet);
 
-  // Update preBet section display
   const preBetDisplay = document.getElementById('preBetAmountDisplay');
   if (preBetDisplay) preBetDisplay.textContent=G.betAmount.toFixed(1)+'♥';
 
   const pct=maxBet>0?Math.min(100,((G.betAmount-minBet)/(maxBet-minBet||1))*100):0;
   const fill=document.getElementById('preBetBarFill');
   if (fill) fill.style.width=pct+'%';
-
-  // Update info text with current bet amount
-  const preBetInfo = document.getElementById('preBetInfo');
-  if (preBetInfo && G.phase === 'preBet') {
-    preBetInfo.innerHTML = t('prebet_info') + `<br><span style="color:var(--gold-light);">🎰 베팅 금액 ${G.betAmount.toFixed(1)}♥이 즉시 차감되며, 정산 시 반환됩니다.</span>`;
-  }
 }
 
 function renderPreBetSection() {
-  const preBetSection = document.getElementById('preBetSection');
-  const fieldSection  = document.getElementById('fieldSection');
-  const handSection   = document.getElementById('handSection');
-  const actionSection = document.getElementById('actionSection');
-
-  if (G.phase === 'preBet') {
-    preBetSection.style.display = 'block';
-    fieldSection.style.display  = 'none';
-    handSection.style.display   = 'none';
-    actionSection.style.display = 'none';
-
-    document.getElementById('preBetTitle').textContent = t('prebet_title');
-    document.getElementById('preBetInfo').innerHTML  = t('prebet_info') + `<br><span style="color:var(--gold-light);">🎰 베팅 금액 ${G.betAmount.toFixed(1)}♥이 즉시 차감되며, 정산 시 반환됩니다.</span>`;
-    document.getElementById('btnDeal').textContent     = t('btn_deal');
+  const section = document.getElementById('preBetSection');
+  if (!section) return;
+  if (G.phase==='preBet') {
+    section.style.display='';
+    document.getElementById('preBetTitle').textContent=t('prebet_title');
+    document.getElementById('preBetInfo').textContent=t('prebet_info');
+    document.getElementById('btnDeal').textContent=t('btn_deal') || '🃏 Deal Cards';
     renderPreBetBar();
   } else {
-    preBetSection.style.display = 'none';
-    fieldSection.style.display  = 'block';
-    handSection.style.display   = 'flex';
-    actionSection.style.display = 'block';
+    section.style.display='none';
   }
 }
 
 function renderField() {
-  if (G.phase === 'preBet') return;
+  const el=document.getElementById('fieldCards');
+  if (!el) return;
   document.getElementById('fieldSectionTitle').textContent=t('hud_field');
-  const row=document.getElementById('fieldCards');
-  row.innerHTML='';
+  el.innerHTML='';
   for (let i=0;i<5;i++) {
-    if (i<G.revealedCount) row.appendChild(makeCardEl(G.fieldCards[i]));
-    else { const s=document.createElement('div'); s.className='card card-hidden'; row.appendChild(s); }
+    if (i<G.revealedCount && G.fieldCards[i]) {
+      el.appendChild(makeCardEl(G.fieldCards[i]));
+    } else {
+      el.appendChild(makeHiddenCard());
+    }
   }
+  document.getElementById('fieldSection').style.display = G.phase==='preBet'?'none':'';
 }
 
 function renderHand() {
-  if (G.phase === 'preBet') return;
+  const el=document.getElementById('handCards');
+  if (!el) return;
   document.getElementById('handSectionTitle').textContent=t('hud_hand');
-  const row=document.getElementById('handCards');
-  row.innerHTML='';
-  const result=VidaGame.computeReturn(G);
-  const handKeys=new Set((result.handCards||[]).map(c=>`${c.rank}-${c.suit}`));
+  el.innerHTML='';
   for (const c of G.handCards) {
-    const el=makeCardEl(c);
-    if (handKeys.has(`${c.rank}-${c.suit}`)) el.classList.add('used-in-hand');
-    row.appendChild(el);
+    el.appendChild(makeCardEl(c));
   }
+  document.getElementById('handSection').style.display = G.phase==='preBet'?'none':'';
 }
 
 function renderHandResult() {
-  if (G.phase === 'preBet') return;
+  if (G.phase!=='betting') {
+    document.getElementById('handName').textContent='—';
+    document.getElementById('handMult').textContent='×0';
+    document.getElementById('suitBonusRow').innerHTML='';
+    document.getElementById('expectedReturn').textContent='+0.00 ♥';
+    document.getElementById('betInfo').textContent='';
+    return;
+  }
   const result=VidaGame.computeReturn(G);
-  const SUIT_SYMBOLS=VidaGame.SUIT_SYMBOLS;
   document.getElementById('handName').textContent=VidaGame.getHandName(result.key,lang);
-  document.getElementById('handMult').textContent='×'+result.mult.toFixed(2);
-  document.getElementById('expectedReturnLabel').textContent=t('hud_expected');
-  // Show total return: winnings (bet*mult) - roundCost (bet was already deducted at preBet)
-  const totalReturn = result.lifeReturn - G.roundCost;
-  const returnStr = totalReturn >= 0 ? `+${totalReturn.toFixed(2)}` : totalReturn.toFixed(2);
-  document.getElementById('expectedReturn').textContent=`${returnStr} ♥`;
-  document.getElementById('expectedReturn').style.color = totalReturn >= 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('betInfo').textContent=`−${G.betHeld.toFixed(1)}♥ (베팅) + ${result.lifeReturn.toFixed(1)}♥ (획득) − ${G.roundCost.toFixed(1)}♥ (차감)`;
-  const sb=result.suitBonus;
-  const sbRow=document.getElementById('suitBonusRow');
-  sbRow.innerHTML='';
-  if (sb?.suit) {
+  document.getElementById('handMult').textContent=`×${result.mult.toFixed(2)}`;
+
+  const bonusRow=document.getElementById('suitBonusRow');
+  bonusRow.innerHTML='';
+  if (result.suitBonus.bonus>0) {
     const badge=document.createElement('span');
-    badge.className=`suit-badge badge-${sb.suit}`;
-    badge.textContent=`${SUIT_SYMBOLS[sb.suit]} ×${sb.count}`;
-    sbRow.appendChild(badge);
-    const txt=document.createElement('span');
-    txt.textContent=`+${sb.bonus.toFixed(3)}`;
-    sbRow.appendChild(txt);
+    badge.className=`suit-badge badge-${result.suitBonus.suit}`;
+    badge.textContent=`${VidaGame.SUIT_SYMBOLS[result.suitBonus.suit]} +${result.suitBonus.bonus.toFixed(2)}`;
+    bonusRow.appendChild(badge);
   }
-  // Show rank bonus
-  if (result.rankBonus > 0) {
-    const rbBadge = document.createElement('span');
-    rbBadge.className = 'suit-badge';
-    rbBadge.style.background = 'rgba(255,204,102,.12)';
-    rbBadge.style.color = '#ffcc66';
-    rbBadge.textContent = `#+${result.rankBonus.toFixed(3)}`;
-    sbRow.appendChild(rbBadge);
+  if (result.rankBonus>0) {
+    const badge=document.createElement('span');
+    badge.className='suit-badge';
+    badge.style.background='rgba(255,204,102,.12)';
+    badge.style.color='#ffcc66';
+    badge.textContent=`#${result.rankBonus.toFixed(2)}`;
+    bonusRow.appendChild(badge);
   }
+
+  const netReturn = +(result.lifeReturn - G.roundCost).toFixed(2);
+  document.getElementById('expectedReturnLabel').textContent=t('hud_expected');
+  const retEl = document.getElementById('expectedReturn');
+  retEl.textContent=`${netReturn>=0?'+':''}${netReturn} ♥`;
+  retEl.style.color = netReturn>=0?'var(--green)':'var(--red)';
+
+  document.getElementById('betInfo').textContent=`${t('bet_held_label')}: ${G.betHeld.toFixed(1)}♥ | ${t('drain_label')}: ${G.roundCost}♥`;
 }
 
 function renderButtons() {
-  const inPlay=G.phase==='betting';
-  const btnReveal=document.getElementById('btnReveal');
-  const btnSettle=document.getElementById('btnSettle');
-  const btnFold  =document.getElementById('btnFold');
-  const btnItem  =document.getElementById('btnItem');
+  const isBetting = G.phase==='betting';
+  const isPreBet = G.phase==='preBet';
 
-  btnReveal.style.display=(inPlay&&G.revealedCount<5)?'flex':'none';
-  btnSettle.style.display=inPlay?'flex':'none';
-  btnFold.style.display  =inPlay?'flex':'none';
-  btnItem.style.display  =(inPlay&&G.heldItem&&!G.itemUsedThisRound)?'flex':'none';
+  document.getElementById('btnReveal').style.display = isBetting && G.revealedCount<5 ? '' : 'none';
+  document.getElementById('btnReveal').textContent = t('btn_reveal');
+  document.getElementById('btnSettle').style.display = isBetting ? '' : 'none';
+  document.getElementById('btnSettle').textContent = t('btn_settle');
+  document.getElementById('btnFold').style.display = isBetting ? '' : 'none';
+  document.getElementById('btnFold').textContent = t('btn_fold');
+  document.getElementById('btnItem').style.display = isBetting && G.heldItem && !G.itemUsedThisRound ? '' : 'none';
+  document.getElementById('btnItem').textContent = t('btn_item');
+  document.getElementById('btnExtraItem').style.display = isBetting && G.extraItemSlot && !G.extraItemUsedThisRound ? '' : 'none';
+  document.getElementById('btnExtraItem').textContent = t('btn_extra_item');
 
-  btnReveal.textContent=t('btn_reveal');
-  btnSettle.textContent=t('btn_settle');
-  btnFold.textContent  =t('btn_fold');
-  btnItem.textContent  =t('btn_item');
+  // Phase info
+  const phaseEl = document.getElementById('phaseInfo');
+  if (isPreBet) phaseEl.textContent = t('phase_prebet',G.round);
+  else if (isBetting) phaseEl.textContent = t('phase_betting',G.round,G.revealedCount);
+  else phaseEl.textContent = '—';
 
-  document.getElementById('phaseInfo').textContent=
-    G.phase==='preBet' ? t('phase_prebet',G.round) :
-    inPlay ? t('phase_betting',G.round,G.revealedCount) :
-    t('phase_processing');
+  document.getElementById('actionSection').style.display = (isBetting||isPreBet) ? '' : 'none';
 }
 
 function renderPassiveChips() {
@@ -1136,54 +1424,93 @@ function renderPassiveChips() {
     if (!lv) continue;
     const def=VidaGame.getPassiveDef(id);
     if (!def) continue;
-    const name=def.nameI18n[lang]||def.nameI18n.en;
     const chip=document.createElement('span');
     chip.className='item-chip passive';
-    chip.textContent=`${name} ${t('shop_level')}${lv}`;
-    chip.title=(def.descI18n[lang]||def.descI18n.en)[lv-1];
+    const name=def.nameI18n[lang]||def.nameI18n.en;
+    chip.textContent=`${name} ${t('lv_label')}${lv}`;
     wrap.appendChild(chip);
   }
 }
 
 function renderItemSlot() {
-  const slot=document.getElementById('itemSlotBox');
-  if (!slot) return;
-  const def=G.heldItem?VidaGame.getItemDef(G.heldItem):null;
-  const name=def?(def.nameI18n[lang]||def.nameI18n.en):t('item_none');
-  const desc=def?(def.descI18n[lang]||def.descI18n.en):'';
-  const used=G.itemUsedThisRound;
-  slot.innerHTML=`
-    <div class="item-slot-label">${t('item_held')}</div>
-    <div class="item-slot-name" style="opacity:${used?0.4:1}">${name}</div>
-    ${desc?`<div class="item-slot-desc" style="opacity:${used?0.35:1}">${desc}</div>`:''}
-    ${!G.heldItem?`<div class="item-slot-next">${t('item_next',G.nextItemAtRound)}</div>`:''}
-  `;
+  const box=document.getElementById('itemSlotBox');
+  if (!box) return;
+  box.querySelector('.item-slot-label')?.remove();
+  box.querySelector('.item-slot-name')?.remove();
+  box.querySelector('.item-slot-desc')?.remove();
+
+  if (G.heldItem) {
+    const def=VidaGame.getItemDef(G.heldItem);
+    const name=def?(def.nameI18n[lang]||def.nameI18n.en):G.heldItem;
+    const desc=def?(def.descI18n[lang]||def.descI18n.en):'';
+    box.innerHTML=`
+      <div class="item-slot-label">${t('item_slot_label')}</div>
+      <div class="item-slot-name">${name}${G.itemUsedThisRound?' ✓':''}</div>
+      <div class="item-slot-desc">${desc}</div>
+    `;
+    box.style.display='';
+  } else {
+    box.innerHTML=`
+      <div class="item-slot-label">${t('item_slot_label')}</div>
+      <div class="item-slot-name" style="color:var(--text-muted);">${t('item_none')}</div>
+    `;
+    box.style.display='';
+  }
+}
+
+function renderExtraItemSlot() {
+  const box=document.getElementById('extraSlotBox');
+  if (!box) return;
+
+  if (G.extraItemSlot) {
+    const def=VidaGame.getItemDef(G.extraItemSlot);
+    const name=def?(def.nameI18n[lang]||def.nameI18n.en):G.extraItemSlot;
+    const desc=def?(def.descI18n[lang]||def.descI18n.en):'';
+    box.innerHTML=`
+      <div class="extra-slot-label">${t('extra_slot_label')}</div>
+      <div class="extra-slot-name">${name}${G.extraItemUsedThisRound?' ✓':''}</div>
+      <div class="item-slot-desc" style="color:var(--text-muted);margin-top:.2rem;line-height:1.35;">${desc}</div>
+    `;
+    box.style.display='';
+  } else {
+    box.style.display='none';
+  }
 }
 
 function renderGameLog() {
-  const box=document.getElementById('gameLog');
-  if (!box) return;
-  box.innerHTML = G.logs.slice(0,5).map(l=>`<div>${l}</div>`).join('');
+  const el=document.getElementById('gameLog');
+  if (!el) return;
+  el.innerHTML='';
+  for (const msg of (G.logs||[]).slice(0,8)) {
+    const div=document.createElement('div');
+    div.textContent=msg;
+    el.appendChild(div);
+  }
 }
 
 // ─────────────────────────────────────────────
-// CARD FACTORY
+// CARD RENDERING
 // ─────────────────────────────────────────────
-const SUIT_SYMBOLS_UI=VidaGame.SUIT_SYMBOLS;
-function makeCardEl(card) {
+function makeCardEl(c) {
   const el=document.createElement('div');
-  const sym=SUIT_SYMBOLS_UI[card.suit];
-  el.className=`card card-face suit-${card.suit}`;
+  el.className=`card card-face suit-${c.suit}`;
   el.innerHTML=`
-    <div class="card-corner"><span class="cr">${card.rank}</span><span class="cs">${sym}</span></div>
-    <div class="card-rank">${card.rank}</div>
-    <div class="card-suit">${sym}</div>
-    <div class="card-corner-br"><span class="cr">${card.rank}</span><span class="cs">${sym}</span></div>`;
+    <div class="card-corner"><span class="cr">${c.rank}</span><span class="cs">${VidaGame.SUIT_SYMBOLS[c.suit]}</span></div>
+    <span class="card-rank">${c.rank}</span>
+    <span class="card-suit">${VidaGame.SUIT_SYMBOLS[c.suit]}</span>
+    <div class="card-corner-br"><span class="cr">${c.rank}</span><span class="cs">${VidaGame.SUIT_SYMBOLS[c.suit]}</span></div>
+  `;
+  return el;
+}
+
+function makeHiddenCard() {
+  const el=document.createElement('div');
+  el.className='card card-hidden';
   return el;
 }
 
 // ─────────────────────────────────────────────
-// NOTIFICATIONS
+// NOTIFICATION
 // ─────────────────────────────────────────────
 function notify(msg, cls='notif-gold') {
   const wrap=document.getElementById('notifications');
@@ -1191,28 +1518,25 @@ function notify(msg, cls='notif-gold') {
   el.className=`notif ${cls}`;
   el.textContent=msg;
   wrap.appendChild(el);
-  setTimeout(()=>el.remove(),3100);
+  setTimeout(()=>el.remove(),3000);
 }
 
 // ─────────────────────────────────────────────
-// STARS
-// ─────────────────────────────────────────────
-function initStars() {
-  const wrap=document.getElementById('stars');
-  for (let i=0;i<80;i++) {
-    const s=document.createElement('div');
-    s.className='star';
-    s.style.cssText=`left:${Math.random()*100}%;top:${Math.random()*100}%;`
-      +`--d:${2+Math.random()*4}s;--delay:${-Math.random()*4}s;--op:${0.2+Math.random()*0.5}`;
-    wrap.appendChild(s);
-  }
-}
-
-// ─────────────────────────────────────────────
-// BOOT
+// INIT
 // ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded',()=>{
-  initStars();
+  // Stars
+  const starsEl=document.getElementById('stars');
+  for (let i=0;i<60;i++) {
+    const s=document.createElement('div');
+    s.className='star';
+    s.style.left=Math.random()*100+'%';
+    s.style.top=Math.random()*100+'%';
+    s.style.setProperty('--d',(2+Math.random()*4)+'s');
+    s.style.setProperty('--delay',Math.random()*3+'s');
+    s.style.setProperty('--op',(0.2+Math.random()*0.5).toString());
+    starsEl.appendChild(s);
+  }
   applyLang();
-  selectDifficulty('normal');
+  updateInfinityButton();
 });

@@ -17,6 +17,7 @@
   --green:        #3dba6f;
   --blue:         #4a9eff;
   --purple:       #9b6dff;
+  --orange:       #ff9860;
   --spade:        #c8c8ff;
   --diamond:      #ff7070;
   --heart:        #ff8fa3;
@@ -26,11 +27,11 @@
   --text-muted:   #7070a0;
 }
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Noto Sans KR',sans-serif;background:var(--bg1);color:var(--text);min-height:100vh;overflow-x:hidden;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg1);color:var(--text);min-height:100vh;overflow-x:hidden;transition:background 1.2s ease;}
 body::before{content:'';position:fixed;inset:0;background:
   radial-gradient(ellipse at 15% 20%,rgba(80,40,180,0.17) 0%,transparent 50%),
   radial-gradient(ellipse at 85% 80%,rgba(180,40,80,0.13) 0%,transparent 50%);
-  pointer-events:none;z-index:0;}
+  pointer-events:none;z-index:0;transition:background 1.2s ease;}
 .stars{position:fixed;inset:0;pointer-events:none;z-index:0;}
 .star{position:absolute;width:2px;height:2px;background:white;border-radius:50%;
   animation:twinkle var(--d,3s) ease-in-out infinite var(--delay,0s);opacity:var(--op,.4);}
@@ -54,8 +55,6 @@ body::before{content:'';position:fixed;inset:0;background:
   100% {transform:translate(0,0);}
 }
 .shaking{animation:screenShake 0.5s ease-out;}
-
-/* heavier shake for big hands */
 @keyframes screenShakeHeavy{
   0%   {transform:translate(0,0);}
   10%  {transform:translate(-8px,4px);}
@@ -125,7 +124,6 @@ body::before{content:'';position:fixed;inset:0;background:
 .stat-val{font-family:'Orbitron',sans-serif;font-size:1.3rem;font-weight:700;line-height:1.2;}
 .stat-life{color:var(--red);}
 .stat-round{color:var(--gold);}
-.stat-pts{color:var(--blue);}
 .life-bar-wrap{flex:1;min-width:140px;display:flex;flex-direction:column;justify-content:center;gap:.38rem;padding:.5rem .9rem;}
 .life-bar-row{display:flex;align-items:center;gap:.45rem;font-size:.7rem;color:var(--text-muted);}
 .life-bar{flex:1;height:6px;background:rgba(255,255,255,.09);border-radius:3px;overflow:hidden;}
@@ -213,7 +211,9 @@ body::before{content:'';position:fixed;inset:0;background:
 .item-slot-label{font-size:.6rem;letter-spacing:.12em;color:var(--text-muted);text-transform:uppercase;margin-bottom:.25rem;}
 .item-slot-name{font-size:.85rem;color:#c8a0ff;font-weight:700;}
 .item-slot-desc{font-size:.7rem;color:var(--text-muted);margin-top:.2rem;line-height:1.35;}
-.item-slot-next{font-size:.67rem;color:var(--text-muted);margin-top:.3rem;}
+.extra-slot-box{padding:.75rem 1rem;border-radius:12px;border:1px solid rgba(255,152,96,.35);background:rgba(255,152,96,.07);margin-bottom:.6rem;}
+.extra-slot-label{font-size:.6rem;letter-spacing:.12em;color:var(--text-muted);text-transform:uppercase;margin-bottom:.25rem;}
+.extra-slot-name{font-size:.85rem;color:var(--orange);font-weight:700;}
 
 /* ACTION AREA */
 .action-section{padding:.9rem 1.1rem;}
@@ -228,7 +228,7 @@ body::before{content:'';position:fixed;inset:0;background:
 }
 .btn-reveal-large:hover{background:linear-gradient(135deg,rgba(74,158,255,.5),rgba(74,158,255,.18));box-shadow:0 0 16px rgba(74,158,255,.2);}
 
-/* DEAL BUTTON (preBet → deal) */
+/* DEAL BUTTON */
 .btn-deal-large{
   display:flex;width:100%;padding:.85rem;font-size:1.1rem;font-weight:700;font-family:'Cinzel',serif;
   border-radius:12px;letter-spacing:.12em;margin-bottom:.6rem;
@@ -263,9 +263,7 @@ body::before{content:'';position:fixed;inset:0;background:
 .bet-btns{display:flex;gap:.3rem;flex-wrap:wrap;}
 
 /* PRE-BET section */
-.prebet-section{
-  padding:1.5rem 1.1rem;text-align:center;
-}
+.prebet-section{padding:1.5rem 1.1rem;text-align:center;}
 .prebet-title{font-family:'Cinzel',serif;font-size:1.2rem;color:var(--gold);margin-bottom:.8rem;letter-spacing:.08em;}
 .prebet-info{font-size:.78rem;color:var(--text-muted);margin-bottom:.6rem;line-height:1.6;}
 
@@ -304,35 +302,25 @@ body::before{content:'';position:fixed;inset:0;background:
 .log-box::-webkit-scrollbar{width:3px;}
 .log-box::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:2px;}
 
+/* ────────── OFFER CARDS (passive/item/shop selection) ────────── */
+.offer-card{padding:.85rem;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:all .18s;text-align:center;}
+.offer-card:hover{background:rgba(255,255,255,.1);border-color:rgba(212,168,67,.38);transform:translateY(-3px);}
+.offer-card .offer-name{font-weight:700;font-size:.82rem;color:var(--gold-light);margin-bottom:.3rem;}
+.offer-card .offer-desc{font-size:.68rem;color:var(--text-muted);line-height:1.42;margin-bottom:.4rem;}
+.offer-card .offer-level{font-size:.65rem;color:var(--blue);font-family:'Orbitron',sans-serif;}
+.offer-card .offer-cost{font-size:.72rem;color:var(--red);font-family:'Orbitron',sans-serif;font-weight:700;margin-top:.3rem;}
+.offer-card.disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
+.offer-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.65rem;margin-bottom:1rem;}
+
 /* ────────── MODALS ────────── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(10px);z-index:100;display:flex;align-items:center;justify-content:center;padding:1rem;animation:fadeIn .25s ease;}
 @keyframes fadeIn {from{opacity:0;}to{opacity:1;}}
 @keyframes slideUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;}}
-.modal-box{width:min(490px,100%);max-height:90vh;overflow-y:auto;padding:1.75rem;animation:slideUp .25s ease;}
+.modal-box{width:min(540px,100%);max-height:90vh;overflow-y:auto;padding:1.75rem;animation:slideUp .25s ease;}
 .modal-box::-webkit-scrollbar{width:4px;}
 .modal-box::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:2px;}
 .modal-title{font-family:'Cinzel',serif;font-size:1.35rem;color:var(--gold);text-align:center;margin-bottom:1.1rem;}
 .modal-subtitle{font-size:.8rem;color:var(--text-muted);text-align:center;margin-bottom:1.1rem;}
-.points-row{display:flex;align-items:center;gap:.7rem;justify-content:center;margin-bottom:.75rem;}
-.points-big{font-family:'Orbitron',sans-serif;font-size:1.6rem;color:var(--blue);font-weight:700;}
-.points-label{font-size:.75rem;color:var(--text-muted);}
-.passive-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-bottom:1.1rem;}
-.passive-card{padding:.85rem;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);transition:all .18s;}
-.passive-card.buyable{cursor:pointer;}
-.passive-card.buyable:hover{background:rgba(255,255,255,.1);border-color:rgba(212,168,67,.38);transform:translateY(-2px);}
-.passive-card.owned{border-color:rgba(212,168,67,.38);background:rgba(212,168,67,.06);}
-.passive-card.maxed{border-color:rgba(155,109,255,.42);background:rgba(155,109,255,.06);cursor:default;}
-.passive-name{font-weight:700;font-size:.8rem;color:var(--gold-light);margin-bottom:.25rem;}
-.passive-desc{font-size:.69rem;color:var(--text-muted);line-height:1.42;}
-.passive-cost{margin-top:.4rem;font-family:'Orbitron',sans-serif;font-size:.68rem;color:var(--blue);}
-.next-level-preview{color:var(--green);opacity:.7;margin-left:.3rem;font-size:.65rem;}
-.passive-level{display:flex;gap:3px;margin-top:.35rem;}
-.pl-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.11);}
-.pl-dot.filled{background:var(--gold);}
-.item-btn{padding:.85rem;border-radius:12px;background:rgba(155,109,255,.08);border:1px solid rgba(155,109,255,.25);cursor:pointer;transition:all .18s;color:var(--text);text-align:left;}
-.item-btn:hover{background:rgba(155,109,255,.18);border-color:rgba(155,109,255,.52);transform:translateY(-2px);}
-.item-btn-name{font-weight:700;font-size:.8rem;color:#c8a0ff;margin-bottom:.25rem;}
-.item-btn-desc{font-size:.69rem;color:var(--text-muted);}
 #cardTargetList{justify-content:center;flex-wrap:wrap;gap:.6rem;margin-bottom:1.1rem;}
 
 /* ────────── GAME OVER ────────── */
@@ -340,6 +328,8 @@ body::before{content:'';position:fixed;inset:0;background:
 .go-panel{padding:2rem;text-align:center;max-width:360px;width:100%;}
 .go-title-text{font-family:'Cinzel',serif;font-size:3.2rem;font-weight:700;color:var(--red);animation:goPulse 1.6s ease-in-out infinite;text-shadow:0 0 32px rgba(232,65,65,.38);}
 @keyframes goPulse{0%,100%{opacity:1;}50%{opacity:.6;}}
+.victory-glow{color:var(--gold)!important;text-shadow:0 0 32px rgba(212,168,67,.5)!important;animation:victoryPulse 1.6s ease-in-out infinite!important;}
+@keyframes victoryPulse{0%,100%{opacity:1;text-shadow:0 0 32px rgba(212,168,67,.5);}50%{opacity:.7;text-shadow:0 0 12px rgba(212,168,67,.3);}}
 .go-sub-text{font-family:'Cinzel',serif;font-size:1rem;color:var(--text-muted);margin:1rem 0;}
 .go-stats{margin:1.1rem 0;display:flex;flex-direction:column;gap:.65rem;}
 .go-stat-label{font-size:.75rem;color:var(--text-muted);}
@@ -366,6 +356,7 @@ body::before{content:'';position:fixed;inset:0;background:
 .lb-tab[data-diff="easy"]:hover,.lb-tab[data-diff="easy"].active{border-color:rgba(61,186,111,.5);color:#3dba6f;background:rgba(61,186,111,.08);}
 .lb-tab[data-diff="hard"]:hover,.lb-tab[data-diff="hard"].active{border-color:rgba(255,152,96,.5);color:#ff9860;background:rgba(255,152,96,.08);}
 .lb-tab[data-diff="insane"]:hover,.lb-tab[data-diff="insane"].active{border-color:rgba(255,96,96,.5);color:#ff6060;background:rgba(255,96,96,.08);}
+.lb-tab[data-diff="infinity"]:hover,.lb-tab[data-diff="infinity"].active{border-color:rgba(155,109,255,.5);color:#c8a0ff;background:rgba(155,109,255,.08);}
 .lb-section-title{font-family:'Cinzel',serif;font-size:.85rem;color:var(--gold-light);margin:1rem 0 .5rem;text-align:center;letter-spacing:.06em;}
 .lb-row{display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);transition:background .15s;}
 .lb-row:hover{background:rgba(255,255,255,.08);}
@@ -376,7 +367,6 @@ body::before{content:'';position:fixed;inset:0;background:
 .lb-info{flex:1;min-width:0;}
 .lb-name{font-size:.82rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .lb-meta{font-size:.6rem;color:var(--text-muted);margin-top:.1rem;}
-.lb-pts{font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:700;color:var(--blue);flex-shrink:0;}
 .lb-round{font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:700;color:var(--gold);flex-shrink:0;}
 .lb-empty{text-align:center;color:var(--text-muted);padding:1.5rem;font-size:.82rem;}
 
@@ -387,7 +377,8 @@ body::before{content:'';position:fixed;inset:0;background:
 @media(max-width:600px){
   .hand-section{flex-direction:column;}
   .hand-info{min-width:0;width:100%;}
-  .diff-grid,.passive-grid{grid-template-columns:1fr;}
+  .diff-grid{grid-template-columns:1fr;}
+  .offer-grid-3{grid-template-columns:1fr;}
   .card{width:54px;height:78px;}
   .card-rank{font-size:.82rem;}
   .card-suit{font-size:1.05rem;}
@@ -423,7 +414,10 @@ body::before{content:'';position:fixed;inset:0;background:
   .lb-row{gap:.4rem;padding:.4rem .6rem;}
   .lb-rank{font-size:.85rem;width:1.6rem;}
   .lb-name{font-size:.75rem;}
-  .lb-pts,.lb-round{font-size:.72rem;}
+  .lb-round{font-size:.72rem;}
+  .offer-card{padding:.6rem;}
+  .offer-card .offer-name{font-size:.75rem;}
+  .offer-card .offer-desc{font-size:.62rem;}
 }
 </style>
 </head>
@@ -461,6 +455,7 @@ body::before{content:'';position:fixed;inset:0;background:
       </div>
     </div>
     <button class="btn btn-gold" id="btnStartGame" onclick="startGame()">▶  START GAME</button>
+    <button class="btn btn-purple" id="btnInfinity" style="width:100%;margin-top:.6rem;display:none;" onclick="startInfinityGame()">∞ INFINITY</button>
     <button class="btn btn-blue" style="width:100%;margin-top:.6rem;" onclick="showLeaderboardScreen()">🏆 LEADERBOARD</button>
   </div>
 </div>
@@ -468,11 +463,11 @@ body::before{content:'';position:fixed;inset:0;background:
 <!-- ══ GAME ══ -->
 <div class="screen" id="gameScreen">
 
-  <!-- MULTIPLIER DISPLAY (floating, appears during resolve) -->
+  <!-- MULTIPLIER DISPLAY -->
   <div id="multBreakdownWrap"></div>
   <div id="multTotalDisplay">×0<span class="mult-label"></span></div>
 
-  <!-- TOP BAR -->
+  <!-- TOP BAR (no Points) -->
   <div class="top-bar">
     <div class="glass stat-box" style="position:relative;overflow:visible;">
       <div id="floatingLifeWrap"></div>
@@ -493,10 +488,6 @@ body::before{content:'';position:fixed;inset:0;background:
       <span class="stat-label" id="hudRoundLabel">ROUND</span>
       <span class="stat-val stat-round" id="roundDisplay">1</span>
     </div>
-    <div class="glass stat-box">
-      <span class="stat-label" id="hudPointsLabel">POINTS</span>
-      <span class="stat-val stat-pts" id="pointDisplay">0</span>
-    </div>
   </div>
 
   <!-- PASSIVE BAR -->
@@ -505,7 +496,7 @@ body::before{content:'';position:fixed;inset:0;background:
     <div id="passiveChips" style="display:flex;gap:.4rem;flex-wrap:wrap;"></div>
   </div>
 
-  <!-- PRE-BET SECTION (shown when phase=preBet) -->
+  <!-- PRE-BET SECTION -->
   <div id="preBetSection" class="glass prebet-section" style="display:none;">
     <div class="prebet-title" id="preBetTitle">Place Your Bet</div>
     <div class="prebet-info" id="preBetInfo">Set your wager before the cards are dealt.</div>
@@ -528,28 +519,25 @@ body::before{content:'';position:fixed;inset:0;background:
     <button class="btn btn-deal-large" id="btnDeal" onclick="confirmBetAndDeal()">🃏 Deal Cards</button>
   </div>
 
-  <!-- FIELD (hidden during preBet) -->
+  <!-- FIELD -->
   <div class="glass field-section" id="fieldSection">
     <div class="section-title" id="fieldSectionTitle">⬡ Field Cards</div>
     <div class="cards-row" id="fieldCards"></div>
   </div>
 
-  <!-- HAND BADGE (centered on game screen) -->
+  <!-- HAND BADGE -->
   <div id="handBadge"></div>
 
-  <!-- HAND (hidden during preBet) -->
+  <!-- HAND -->
   <div class="glass hand-section" id="handSection">
     <div id="handFlashOverlay"></div>
-
     <div class="hand-cards">
       <div class="section-title" id="handSectionTitle">✦ Your Hand</div>
       <div class="cards-row" id="handCards"></div>
     </div>
-
     <div class="hand-info">
-      <!-- Item slot -->
       <div class="item-slot-box" id="itemSlotBox"></div>
-      <!-- Hand result -->
+      <div class="extra-slot-box" id="extraSlotBox"></div>
       <div class="glass-sm hand-result">
         <div class="hand-name" id="handName">—</div>
         <div class="hand-mult" id="handMult">×0</div>
@@ -563,24 +551,18 @@ body::before{content:'';position:fixed;inset:0;background:
     </div>
   </div>
 
-  <!-- ACTION AREA (shown during betting phase) -->
+  <!-- ACTION AREA -->
   <div class="glass action-section" id="actionSection">
-
-    <!-- REVEAL — full width, large -->
     <button class="btn btn-reveal-large" id="btnReveal" style="display:none;" onclick="revealNext()">▶ Reveal Card</button>
-
-    <!-- SETTLE / FOLD side by side -->
     <div class="settle-fold-row">
       <button class="btn btn-settle-big" id="btnSettle" style="display:none;" onclick="settle()">Settle</button>
       <button class="btn btn-red btn-fold-half" id="btnFold" style="display:none;" onclick="foldRound()">Fold</button>
     </div>
-
-    <!-- PHASE INFO + ITEM -->
     <div class="phase-item-row">
       <div class="phase-info" id="phaseInfo">—</div>
       <button class="btn btn-purple btn-sm" id="btnItem" style="display:none;" onclick="openItemModal()">🎴 Item</button>
+      <button class="btn btn-sm" id="btnExtraItem" style="display:none;background:rgba(255,152,96,.18);border-color:rgba(255,152,96,.4);color:#ff9860;" onclick="openExtraItemModal()">💎 Extra</button>
     </div>
-
     <div class="glass-sm log-box" id="gameLog"></div>
   </div>
 </div>
@@ -592,17 +574,39 @@ body::before{content:'';position:fixed;inset:0;background:
     <div class="go-sub-text"   id="goSub">Life depleted</div>
     <div class="go-stats">
       <div><div class="go-stat-label" id="goFinalRoundLabel">Final Round</div><div class="go-stat-val gold" id="finalRound">0</div></div>
-      <div><div class="go-stat-label" id="goPointsLabel">Total Points</div><div class="go-stat-val blue" id="finalPoints">0</div></div>
+      <div><div class="go-stat-label" id="goLifeLabel">Remaining Life</div><div class="go-stat-val gold" id="finalLife">0</div></div>
     </div>
     <div id="goNicknameSection" style="margin:1rem 0;">
-      <div style="font-size:.8rem;color:var(--gold-light);margin-bottom:.5rem;" id="goNicknameLabel">닉네임을 입력하세요</div>
+      <div style="font-size:.8rem;color:var(--gold-light);margin-bottom:.5rem;" id="goNicknameLabel">Enter your nickname</div>
       <div style="display:flex;gap:.5rem;">
         <input type="text" id="goNicknameInput" maxlength="12" placeholder="Nickname" style="flex:1;padding:.55rem .8rem;border-radius:8px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text);font-size:.9rem;font-family:'Noto Sans KR',sans-serif;outline:none;">
-        <button class="btn btn-gold" style="width:auto;padding:.55rem 1rem;font-size:.85rem;" id="btnSubmitScore" onclick="submitScore()">등록</button>
+        <button class="btn btn-gold" style="width:auto;padding:.55rem 1rem;font-size:.85rem;" id="btnSubmitScore" onclick="submitScore()">Register</button>
       </div>
       <div id="goSubmitStatus" style="font-size:.72rem;color:var(--text-muted);margin-top:.35rem;"></div>
     </div>
     <button class="btn btn-gold" id="btnHome" onclick="showTitle()">Back to Title</button>
+  </div>
+</div>
+
+<!-- ══ VICTORY ══ -->
+<div class="screen" id="victoryScreen">
+  <div class="glass go-panel">
+    <div class="go-title-text victory-glow" id="victoryTitle">🎉 VICTORY!</div>
+    <div class="go-sub-text" id="victorySub">You survived 100 rounds!</div>
+    <div class="go-stats">
+      <div><div class="go-stat-label" id="victoryRoundLabel">Final Round</div><div class="go-stat-val gold" id="victoryRound">100</div></div>
+      <div><div class="go-stat-label" id="victoryLifeLabel">Remaining Life</div><div class="go-stat-val gold" id="victoryLife">0</div></div>
+    </div>
+    <div id="victoryNicknameSection" style="margin:1rem 0;">
+      <div style="font-size:.8rem;color:var(--gold-light);margin-bottom:.5rem;" id="victoryNicknameLabel">Enter your nickname</div>
+      <div style="display:flex;gap:.5rem;">
+        <input type="text" id="victoryNicknameInput" maxlength="12" placeholder="Nickname" style="flex:1;padding:.55rem .8rem;border-radius:8px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text);font-size:.9rem;font-family:'Noto Sans KR',sans-serif;outline:none;">
+        <button class="btn btn-gold" style="width:auto;padding:.55rem 1rem;font-size:.85rem;" id="btnVictorySubmit" onclick="submitVictoryScore()">Register</button>
+      </div>
+      <div id="victorySubmitStatus" style="font-size:.72rem;color:var(--text-muted);margin-top:.35rem;"></div>
+    </div>
+    <button class="btn btn-purple" style="width:100%;margin-bottom:.6rem;" id="btnInfinityContinue" onclick="continueInfinity()">Continue (Infinity Mode)</button>
+    <button class="btn btn-gold" id="btnVictoryHome" onclick="showTitle()">Back to Title</button>
   </div>
 </div>
 
@@ -617,6 +621,7 @@ body::before{content:'';position:fixed;inset:0;background:
       <div class="lb-tab" data-diff="normal" onclick="switchLbTab('normal')">NORMAL</div>
       <div class="lb-tab" data-diff="hard" onclick="switchLbTab('hard')">HARD</div>
       <div class="lb-tab" data-diff="insane" onclick="switchLbTab('insane')">INSANE</div>
+      <div class="lb-tab" data-diff="infinity" onclick="switchLbTab('infinity')">∞</div>
     </div>
     <div id="leaderboardList" style="display:flex;flex-direction:column;gap:.4rem;"></div>
     <button class="btn btn-gold" style="margin-top:1rem;" onclick="showTitle()">← Back to Title</button>
@@ -627,18 +632,37 @@ body::before{content:'';position:fixed;inset:0;background:
 
 <!-- ══ MODALS ══ -->
 
-<!-- SHOP -->
+<!-- PASSIVE SELECTION -->
+<div class="modal-overlay hidden" id="passiveSelectionModal">
+  <div class="glass modal-box">
+    <div class="modal-title" id="passiveSelectTitle">Choose a Passive</div>
+    <div class="modal-subtitle" id="passiveSelectSubtitle">Pick one of three upgrades</div>
+    <div class="offer-grid-3" id="passiveOfferGrid"></div>
+  </div>
+</div>
+
+<!-- ITEM SELECTION -->
+<div class="modal-overlay hidden" id="itemSelectionModal">
+  <div class="glass modal-box">
+    <div class="modal-title" id="itemSelectTitle">Choose an Item</div>
+    <div class="modal-subtitle" id="itemSelectSubtitle">Pick one of three items</div>
+    <div class="offer-grid-3" id="itemOfferGrid"></div>
+  </div>
+</div>
+
+<!-- SHOP (buy with Life) -->
 <div class="modal-overlay hidden" id="shopModal">
   <div class="glass modal-box">
-    <div class="modal-title" id="shopTitle">⚗ Passive Shop</div>
-    <div class="points-row">
-      <span class="points-label" id="shopPointsLabel">Points</span>
-      <span class="points-big"   id="shopPointsVal">0</span>
-      <span class="points-label">P</span>
+    <div class="modal-title" id="shopTitle">🏪 Shop</div>
+    <div class="modal-subtitle" id="shopSubtitle">Buy items with Life</div>
+    <div style="text-align:center;margin-bottom:.75rem;">
+      <span style="font-size:.75rem;color:var(--text-muted);" id="shopLifeLabel">Current Life</span>
+      <span style="font-family:'Orbitron',sans-serif;font-size:1.3rem;color:var(--red);font-weight:700;margin-left:.4rem;" id="shopLifeVal">20</span>
+      <span style="color:var(--red);">♥</span>
     </div>
-    <div class="modal-subtitle" id="shopSubtitle">Spend points to upgrade passives</div>
-    <div class="passive-grid" id="passiveGrid"></div>
-    <button class="btn btn-gold" id="btnShopDone" onclick="closeShop()">Done → Next Round</button>
+    <div id="shopExtraSlotInfo" style="text-align:center;font-size:.72rem;color:var(--text-muted);margin-bottom:.6rem;"></div>
+    <div class="offer-grid-3" id="shopOfferGrid"></div>
+    <button class="btn" style="width:100%;" id="btnShopSkip" onclick="closeShopModal()">Skip</button>
   </div>
 </div>
 

@@ -1,14 +1,18 @@
 /**
- * VIDA POKER — game.js  v3
+ * VIDA POKER — game.js  v4
  * Pure game logic. Zero DOM.
  *
- * v3 changes:
- *  - Additive multiplier system: totalMult = handMult + suitBonus + rankBonus + passiveBonuses
- *  - Starting at 0x (highCard), pair+ should give meaningful total (≥~0.8 from suit+rank)
- *  - Straight target ≈ 2.0x total (hand ~1.5 + bonuses ~0.5)
- *  - Common hands (straight, full house) have modest multipliers
- *  - Points reworked: fixed per hand type + round bonus (1-2 upgrades per round)
- *  - preBet phase: bet before seeing cards
+ * v4 changes:
+ *  - REMOVE POINT SYSTEM: no totalPoints, no HAND_POINTS, no buyPassive()
+ *  - PASSIVE ITEMS: choose 1 of 3 random passives at round 1 and every 5 rounds
+ *  - ACTIVE ITEMS: choose 1 of 3 random items at round 1 and every 10 rounds (if no heldItem)
+ *  - SHOP SYSTEM: buy active items with Life every 5 rounds (extraItemSlot)
+ *  - GAME BALANCE: reduced SUIT_PER_CARD, reduced rank bonus, reduced PASSIVE_DEFS values
+ *  - Life-scaling drain (prevents exponential growth)
+ *  - Adjusted HAND_MULTS (increase gap between bad and good hands)
+ *  - INFINITY MODE: no round cap after victory at round 100
+ *  - BACKGROUND STAGES: getBackgroundStage(G)
+ *  - Removed nextItemAtRound from G
  */
 
 // ─────────────────────────────────────────────
@@ -25,62 +29,45 @@ const RED_SUITS   = new Set(['diamond','heart']);
 /**
  * Suit bonus per card of best suit (additive)
  * Only counted when you have ≥2 cards of that suit in your best hand
+ * v4: Reduced values
  */
-const SUIT_PER_CARD = { spade:0.08, diamond:0.06, heart:0.05, club:0.03 };
+const SUIT_PER_CARD = { spade:0.04, diamond:0.03, heart:0.025, club:0.015 };
 
 /**
- * Difficulty presets — v3
+ * Difficulty presets — v4
  *
  * baseBet          : base life units the player wagers each hand
  * startLife        : always 20
  * baseCostPerRound : life drained per round at round 1
  * revealPenalty    : extra drain added per field card revealed beyond the 2 free ones
  * roundCostGrowth  : how much baseCost grows each round
- * pointMult        : point multiplier (higher on harder modes)
+ * lifeDrainRate    : extra drain per unit of Life exceeding starting Life (prevents snowball)
+ * maxRound         : round cap for normal mode (infinity mode has no cap)
  */
 const DIFFICULTY_PRESETS = {
-  easy:   { baseBet:2.0, startLife:20, baseCostPerRound:1.0, revealPenalty:0.30, roundCostGrowth:0.35, pointMult:0.8  },
-  normal: { baseBet:1.8, startLife:20, baseCostPerRound:1.5, revealPenalty:0.45, roundCostGrowth:0.50, pointMult:1.0  },
-  hard:   { baseBet:1.6, startLife:20, baseCostPerRound:2.0, revealPenalty:0.60, roundCostGrowth:0.70, pointMult:1.3  },
-  insane: { baseBet:1.4, startLife:20, baseCostPerRound:2.8, revealPenalty:0.85, roundCostGrowth:1.00, pointMult:1.8  },
+  easy:   { baseBet:2.0, startLife:20, baseCostPerRound:1.0, revealPenalty:0.30, roundCostGrowth:0.35, lifeDrainRate:0.04, maxRound:100 },
+  normal: { baseBet:1.8, startLife:20, baseCostPerRound:1.5, revealPenalty:0.45, roundCostGrowth:0.50, lifeDrainRate:0.07, maxRound:100 },
+  hard:   { baseBet:1.6, startLife:20, baseCostPerRound:2.0, revealPenalty:0.60, roundCostGrowth:0.70, lifeDrainRate:0.11, maxRound:100 },
+  insane: { baseBet:1.4, startLife:20, baseCostPerRound:2.8, revealPenalty:0.85, roundCostGrowth:1.00, lifeDrainRate:0.16, maxRound:100 },
 };
 
 /**
- * Hand multipliers — v3 (ADDITIVE system, starts at 0)
+ * Hand multipliers — v4 (ADDITIVE system, starts at 0)
  *
  * Total multiplier = handMult + suitBonus + rankBonus + passiveBonuses
- * Straight target: ~1.5 + ~0.5 bonuses ≈ 2.0x
- * Full house is common in 7-card: keep modest
- * Rare hands (4OAK+, SF, RF) can be much bigger
+ * v4: Increased gap between bad and good hands
  */
 const HAND_MULTS = {
   highCard:      0,
-  onePair:       0.5,
-  twoPair:       0.8,
-  threeOfAKind:  1.1,
-  straight:      1.5,
-  flush:         1.3,
-  fullHouse:     1.7,
+  onePair:       0.4,
+  twoPair:       0.7,
+  threeOfAKind:  1.0,
+  straight:      1.4,
+  flush:         1.2,
+  fullHouse:     1.8,
   fourOfAKind:   3.0,
   straightFlush: 5.0,
   royalFlush:    8.0,
-};
-
-/**
- * Fixed points awarded per hand type (v3)
- * No longer scales with earned life — purely based on hand achievement
- */
-const HAND_POINTS = {
-  highCard:      0,
-  onePair:       2,
-  twoPair:       4,
-  threeOfAKind:  6,
-  straight:      8,
-  flush:         10,
-  fullHouse:     14,
-  fourOfAKind:   20,
-  straightFlush: 30,
-  royalFlush:    50,
 };
 
 const HAND_NAMES_I18N = {
@@ -111,13 +98,13 @@ const HAND_RARITY = {
 };
 
 // ─────────────────────────────────────────────
-// PASSIVE DEFINITIONS  v3
+// PASSIVE DEFINITIONS  v4
 // Effects adjusted for additive multiplier system
+// No costs array (points removed); passives are chosen, not bought
 // ─────────────────────────────────────────────
 const PASSIVE_DEFS = [
   {
     id:'lifeBonus', maxLv:5,
-    costs:[4,7,11,16,22],
     nameI18n:  { en:'Spring of Life',  ko:'생명의 샘'   },
     descI18n:  {
       en:['Start +1 Life','Start +2 Life','Start +3 Life','Start +4 Life','Start +5 Life'],
@@ -126,79 +113,73 @@ const PASSIVE_DEFS = [
     effect:(lv)=>({ startLifeBonus: lv }),
   },
   {
-    id:'betBoost', maxLv:4,
-    costs:[5,9,14,20],
+    id:'betBoost', maxLv:3,
     nameI18n:  { en:"Gambler's Soul",  ko:'도박사의 혼' },
     descI18n:  {
-      en:['Bet mult +0.15','Bet mult +0.30','Bet mult +0.45','Bet mult +0.65'],
-      ko:['베팅 배율 +0.15','베팅 배율 +0.30','베팅 배율 +0.45','베팅 배율 +0.65'],
+      en:['Bet mult +0.08','Bet mult +0.15','Bet mult +0.25'],
+      ko:['베팅 배율 +0.08','베팅 배율 +0.15','베팅 배율 +0.25'],
     },
-    effect:(lv)=>({ betBonus:[0,0.15,0.30,0.45,0.65][lv] }),
+    effect:(lv)=>({ betBonus:[0,0.08,0.15,0.25][lv] }),
   },
   {
     id:'suitMaster', maxLv:3,
-    costs:[6,12,20],
     nameI18n:  { en:'Suit Master',     ko:'문양의 달인' },
     descI18n:  {
-      en:['Suit bonus +50%','Suit bonus +100%','Suit bonus +160%'],
-      ko:['문양 보너스 +50%','문양 보너스 +100%','문양 보너스 +160%'],
+      en:['Suit bonus +30%','Suit bonus +60%','Suit bonus +100%'],
+      ko:['문양 보너스 +30%','문양 보너스 +60%','문양 보너스 +100%'],
     },
-    effect:(lv)=>({ suitBonusMultAdd:[0,0.5,1.0,1.6][lv] }),
+    effect:(lv)=>({ suitBonusMultAdd:[0,0.3,0.6,1.0][lv] }),
   },
   {
     id:'rankBonus', maxLv:3,
-    costs:[5,10,17],
     nameI18n:  { en:"Noble's Hand",    ko:'귀족의 패'   },
     descI18n:  {
-      en:['Rank bonus +50%','Rank bonus +100%','Rank bonus +160%'],
-      ko:['숫자 보너스 +50%','숫자 보너스 +100%','숫자 보너스 +160%'],
+      en:['Rank bonus +30%','Rank bonus +60%','Rank bonus +100%'],
+      ko:['숫자 보너스 +30%','숫자 보너스 +60%','숫자 보너스 +100%'],
     },
-    effect:(lv)=>({ rankBonusMultAdd:[0,0.5,1.0,1.6][lv] }),
+    effect:(lv)=>({ rankBonusMultAdd:[0,0.3,0.6,1.0][lv] }),
   },
   {
     id:'lowCost', maxLv:4,
-    costs:[4,8,13,20],
     nameI18n:  { en:'Frugality',       ko:'절약의 미덕' },
     descI18n:  {
-      en:['Round drain −8%','Round drain −16%','Round drain −25%','Round drain −35%'],
-      ko:['라운드 차감 −8%','라운드 차감 −16%','라운드 차감 −25%','라운드 차감 −35%'],
+      en:['Round drain −6%','Round drain −12%','Round drain −18%','Round drain −25%'],
+      ko:['라운드 차감 −6%','라운드 차감 −12%','라운드 차감 −18%','라운드 차감 −25%'],
     },
-    effect:(lv)=>({ costReduction:[0,0.08,0.16,0.25,0.35][lv] }),
+    effect:(lv)=>({ costReduction:[0,0.06,0.12,0.18,0.25][lv] }),
   },
   {
     id:'multBoost', maxLv:3,
-    costs:[8,15,25],
     nameI18n:  { en:'Alchemist',       ko:'연금술사'    },
     descI18n:  {
-      en:['Total mult +0.15','Total mult +0.35','Total mult +0.6'],
-      ko:['최종 배율 +0.15','최종 배율 +0.35','최종 배율 +0.6'],
+      en:['Total mult +0.08','Total mult +0.18','Total mult +0.30'],
+      ko:['최종 배율 +0.08','최종 배율 +0.18','최종 배율 +0.30'],
     },
-    effect:(lv)=>({ multFlatBonus:[0,0.15,0.35,0.6][lv] }),
+    effect:(lv)=>({ multFlatBonus:[0,0.08,0.18,0.30][lv] }),
   },
   {
     id:'betRefund', maxLv:3,
-    costs:[6,12,20],
     nameI18n:  { en:'Insurance',       ko:'보험'        },
     descI18n:  {
-      en:['Fold refunds 10% of drain','Fold refunds 20%','Fold refunds 30%'],
-      ko:['폴드 시 차감의 10% 환급','폴드 시 20% 환급','폴드 시 30% 환급'],
+      en:['Fold refunds 8% of drain','Fold refunds 15%','Fold refunds 22%'],
+      ko:['폴드 시 차감의 8% 환급','폴드 시 15% 환급','폴드 시 22% 환급'],
     },
-    effect:(lv)=>({ foldRefund:[0,0.10,0.20,0.30][lv] }),
+    effect:(lv)=>({ foldRefund:[0,0.08,0.15,0.22][lv] }),
   },
   {
     id:'highHandBonus', maxLv:3,
-    costs:[7,13,22],
     nameI18n:  { en:'High Roller',     ko:'하이 롤러'   },
     descI18n:  {
-      en:['Flush+ hands: +0.2 mult','Flush+ hands: +0.4 mult','Flush+ hands: +0.7 mult'],
-      ko:['플러시 이상: 배율 +0.2','플러시 이상: 배율 +0.4','플러시 이상: 배율 +0.7'],
+      en:['Flush+ hands: +0.10 mult','Flush+ hands: +0.20 mult','Flush+ hands: +0.35 mult'],
+      ko:['플러시 이상: 배율 +0.10','플러시 이상: 배율 +0.20','플러시 이상: 배율 +0.35'],
     },
-    effect:(lv)=>({ highHandFlatBonus:[0,0.2,0.4,0.7][lv] }),
+    effect:(lv)=>({ highHandFlatBonus:[0,0.10,0.20,0.35][lv] }),
   },
 ];
 
 // ─────────────────────────────────────────────
-// ACTIVE ITEM DEFINITIONS  v3 (unchanged)
+// ACTIVE ITEM DEFINITIONS  v4
+// Added shopCost field for shop system
 // ─────────────────────────────────────────────
 const ITEM_DEFS = [
   {
@@ -206,42 +187,49 @@ const ITEM_DEFS = [
     nameI18n:  { en:'⬆ Rank Up',         ko:'⬆ 랭크업'          },
     descI18n:  { en:'Increase one hand card rank by 1 (not Ace)', ko:'패 카드 1장 숫자 +1 (A 제외)' },
     targetPool:'hand', action:'rank_up',
+    shopCost: 5,
   },
   {
     id:'draw',
     nameI18n:  { en:'🃏 Card Swap',        ko:'🃏 카드 교체'        },
     descI18n:  { en:'Replace one hand card with a random new draw', ko:'패 카드 1장을 새로 뽑음' },
     targetPool:'hand', action:'redraw',
+    shopCost: 4,
   },
   {
     id:'colorSwapRed',
     nameI18n:  { en:'🔴 Paint Red',        ko:'🔴 빨간 물감'        },
     descI18n:  { en:'Change one hand card suit to a random red suit (♦ or ♥)', ko:'패 카드 1장을 랜덤 빨간 문양(♦/♥)으로 변환' },
     targetPool:'hand', action:'color_to_red',
+    shopCost: 3,
   },
   {
     id:'colorSwapBlack',
     nameI18n:  { en:'⚫ Paint Black',       ko:'⚫ 검은 물감'        },
     descI18n:  { en:'Change one hand card suit to a random black suit (♠ or ♣)', ko:'패 카드 1장을 랜덤 검은 문양(♠/♣)으로 변환' },
     targetPool:'hand', action:'color_to_black',
+    shopCost: 3,
   },
   {
     id:'toSpade',
     nameI18n:  { en:'♠ Spade Seal',        ko:'♠ 스페이드 봉인'    },
     descI18n:  { en:'Change one hand card suit to ♠ Spade', ko:'패 카드 1장의 문양을 ♠로 변환' },
     targetPool:'hand', action:'suit_to_spade',
+    shopCost: 4,
   },
   {
     id:'rankSwap',
     nameI18n:  { en:'🔀 Rank Shuffle',     ko:'🔀 랭크 셔플'       },
     descI18n:  { en:'Randomly swap the ranks of your two hand cards', ko:'패 두 장의 숫자를 무작위로 교환' },
     targetPool:null, action:'rank_swap',
+    shopCost: 4,
   },
   {
     id:'rankDown',
     nameI18n:  { en:'⬇ Demote & Draw',     ko:'⬇ 다운 & 드로우'   },
     descI18n:  { en:'Lower one hand card rank by 1, then draw an extra card to hand (hand becomes 3)', ko:'패 카드 1장 숫자 -1, 대신 덱에서 1장 추가 드로우 (패 3장)' },
     targetPool:'hand', action:'rank_down_draw',
+    shopCost: 4,
   },
 ];
 
@@ -345,7 +333,7 @@ function getBestHand(cards) {
 }
 
 // ─────────────────────────────────────────────
-// SUIT BONUS (v3 — ADDITIVE)
+// SUIT BONUS (v4 — ADDITIVE)
 // ─────────────────────────────────────────────
 function getSuitBonus(cards, suitBonusMultAdd=0) {
   const suitCnt={};
@@ -364,14 +352,14 @@ function getSuitBonus(cards, suitBonusMultAdd=0) {
 }
 
 // ─────────────────────────────────────────────
-// RANK BONUS (v3 — ADDITIVE)
+// RANK BONUS (v4 — ADDITIVE)
 // ─────────────────────────────────────────────
 function getRankBonus(cards, rankBonusMultAdd=0) {
   if (!cards.length) return 0;
   // Average rank value of all cards, scaled
   const avgRank = cards.reduce((s,c)=>s+RANK_VAL[c.rank],0) / cards.length;
-  // (avgRank - 2) / 12 gives 0~1 range; multiply by 0.35 for modest base
-  const base = Math.max(0, (avgRank - 2) / 12 * 0.35);
+  // (avgRank - 2) / 12 gives 0~1 range; multiply by 0.14 for modest base (v4: reduced from 0.35)
+  const base = Math.max(0, (avgRank - 2) / 12 * 0.14);
   return +(base * (1 + rankBonusMultAdd)).toFixed(4);
 }
 
@@ -389,7 +377,7 @@ function getPassiveEffect(passives) {
 }
 
 // ─────────────────────────────────────────────
-// ROUND COST
+// ROUND COST (v4 — with life-scaling drain)
 // ─────────────────────────────────────────────
 function computeRoundCost(G) {
   const preset  = DIFFICULTY_PRESETS[G.settings.difficulty];
@@ -397,13 +385,16 @@ function computeRoundCost(G) {
   let cost = preset.baseCostPerRound + (G.round-1)*preset.roundCostGrowth;
   const extraReveals = Math.max(0, G.revealedCount-2);
   cost += extraReveals*preset.revealPenalty;
+  // Life-scaling drain: extra drain when Life exceeds starting Life
+  const lifeExcess = Math.max(0, G.life - preset.startLife);
+  cost += lifeExcess * preset.lifeDrainRate;
   if (passive.costReduction) cost *= (1-passive.costReduction);
   G.roundCost = +cost.toFixed(2);
   return G.roundCost;
 }
 
 // ─────────────────────────────────────────────
-// COMPUTE RETURN (v3 — ADDITIVE system)
+// COMPUTE RETURN (v4 — ADDITIVE system)
 // ─────────────────────────────────────────────
 function computeReturn(G) {
   const all=getAllCards(G);
@@ -488,17 +479,19 @@ function drawCard(G) {
 }
 
 // ─────────────────────────────────────────────
-// INIT GAME
+// INIT GAME (v4)
 // ─────────────────────────────────────────────
 function initGame(settings={}) {
   const difficulty = (settings.difficulty||'normal').toLowerCase();
   const preset     = DIFFICULTY_PRESETS[difficulty]||DIFFICULTY_PRESETS.normal;
+  const passive    = {};
+  // Apply startLifeBonus from passives (lifeBonus passive may be pre-selected)
+  const startLifeBonus = 0;
   const G = {
     settings:   { difficulty, lang: settings.lang||'en' },
-    life:       preset.startLife,
-    maxLife:    preset.startLife,
+    life:       preset.startLife + startLifeBonus,
+    maxLife:    preset.startLife + startLifeBonus,
     round:      1,
-    totalPoints:0,
     deck:       shuffle(makeDeck()),
     handCards:  [],
     fieldCards: [],
@@ -508,9 +501,11 @@ function initGame(settings={}) {
     roundCost:  0,
     passives:   {},
     heldItem:   null,
-    betHeld:    0,         // amount held in escrow during betting phase
+    betHeld:    0,
     itemUsedThisRound: false,
-    nextItemAtRound: 10,
+    extraItemSlot: null,
+    extraItemUsedThisRound: false,
+    infinityMode: settings.infinityMode || false,
     logs:       [],
     lastResult: null,
   };
@@ -518,7 +513,218 @@ function initGame(settings={}) {
 }
 
 // ─────────────────────────────────────────────
-// PRE-BET (v3 — bet before seeing cards)
+// INFINITY MODE (v4)
+// ─────────────────────────────────────────────
+function initInfinityGame(settings={}) {
+  const G = initGame({...settings, infinityMode: true});
+  return G;
+}
+
+function checkRoundCap(G) {
+  const preset = DIFFICULTY_PRESETS[G.settings.difficulty];
+  if (!G.infinityMode && G.round >= preset.maxRound) return 'victory';
+  return 'continue';
+}
+
+// ─────────────────────────────────────────────
+// BACKGROUND STAGES (v4)
+// ─────────────────────────────────────────────
+function getBackgroundStage(G) {
+  return Math.floor((G.round - 1) / 10);
+}
+
+// ─────────────────────────────────────────────
+// PASSIVE SELECTION (v4 — choose 1 of 3)
+// ─────────────────────────────────────────────
+function shouldShowPassiveSelection(G) {
+  return G.round === 1 || G.round % 5 === 0;
+}
+
+function generatePassiveOffers(G) {
+  // Filter passives that aren't maxed
+  const available = PASSIVE_DEFS.filter(def => {
+    const lv = G.passives[def.id] || 0;
+    return lv < def.maxLv;
+  });
+  // Shuffle and pick up to 3
+  const shuffled = shuffle([...available]);
+  const picks = shuffled.slice(0, 3);
+  return picks.map(def => {
+    const currentLv = G.passives[def.id] || 0;
+    const nextLv = currentLv + 1;
+    const loc = G.settings.lang || 'en';
+    const nextDesc = def.descI18n[loc]
+      ? def.descI18n[loc][nextLv - 1] || def.descI18n.en[nextLv - 1] || ''
+      : def.descI18n.en[nextLv - 1] || '';
+    return {
+      id: def.id,
+      nameI18n: def.nameI18n,
+      descI18n: def.descI18n,
+      currentLv,
+      maxLv: def.maxLv,
+      nextDesc,
+    };
+  });
+}
+
+function selectPassive(G, passiveId) {
+  const def = PASSIVE_DEFS.find(p => p.id === passiveId);
+  if (!def) return { ok: false, reason: 'not_found' };
+  const lv = G.passives[passiveId] || 0;
+  if (lv >= def.maxLv) return { ok: false, reason: 'maxed' };
+  G.passives[passiveId] = lv + 1;
+  // If lifeBonus was selected, apply the extra life
+  if (passiveId === 'lifeBonus') {
+    const bonus = 1; // Each level of lifeBonus gives +1 start life
+    // For in-game: add the life immediately
+    G.life = +(G.life + bonus).toFixed(2);
+    G.maxLife = +(G.maxLife + bonus).toFixed(2);
+  }
+  addLog(G, `passive:${passiveId}:${G.passives[passiveId]}`);
+  return { ok: true, newLevel: G.passives[passiveId] };
+}
+
+// ─────────────────────────────────────────────
+// ACTIVE ITEM SELECTION (v4 — choose 1 of 3)
+// ─────────────────────────────────────────────
+function shouldShowItemSelection(G) {
+  return (G.round === 1 || G.round % 10 === 0) && G.heldItem === null;
+}
+
+function generateItemOffers(G) {
+  const shuffled = shuffle([...ITEM_DEFS]);
+  const picks = shuffled.slice(0, 3);
+  return picks.map(def => ({
+    id: def.id,
+    nameI18n: def.nameI18n,
+    descI18n: def.descI18n,
+  }));
+}
+
+function selectItem(G, itemId) {
+  const def = ITEM_DEFS.find(d => d.id === itemId);
+  if (!def) return { ok: false, reason: 'not_found' };
+  G.heldItem = itemId;
+  addLog(G, `item_selected:${itemId}`);
+  return { ok: true };
+}
+
+// ─────────────────────────────────────────────
+// SHOP SYSTEM (v4 — buy items with Life)
+// ─────────────────────────────────────────────
+function shouldShowShop(G) {
+  return G.round % 5 === 0;
+}
+
+function generateShopOffers(G) {
+  const shuffled = shuffle([...ITEM_DEFS]);
+  const picks = shuffled.slice(0, 3);
+  return picks.map(def => ({
+    id: def.id,
+    nameI18n: def.nameI18n,
+    descI18n: def.descI18n,
+    lifeCost: def.shopCost,
+  }));
+}
+
+function buyShopItem(G, itemId) {
+  const def = ITEM_DEFS.find(d => d.id === itemId);
+  if (!def) return { ok: false, reason: 'not_found' };
+  const cost = def.shopCost;
+  if (G.life < cost) return { ok: false, reason: 'not_enough_life' };
+  G.life = +(G.life - cost).toFixed(2);
+  G.extraItemSlot = itemId;
+  G.extraItemUsedThisRound = false;
+  addLog(G, `shop_buy:${itemId}:${cost}`);
+  return { ok: true, newLife: G.life };
+}
+
+function useExtraItem(G, targetIdx=-1) {
+  const itemId = G.extraItemSlot;
+  if (!itemId)                       return { ok:false, reason:'no_item' };
+  if (G.extraItemUsedThisRound)      return { ok:false, reason:'already_used' };
+  if (G.phase!=='betting')           return { ok:false, reason:'wrong_phase' };
+  const def = ITEM_DEFS.find(d => d.id === itemId);
+  if (!def) return { ok:false, reason:'not_found' };
+
+  let detail = {};
+
+  switch(def.action) {
+    case 'rank_up': {
+      const c = G.handCards[targetIdx];
+      if (!c) return { ok:false, reason:'invalid_target' };
+      if (c.rank==='A') return { ok:false, reason:'ace_max' };
+      const ri = RANKS.indexOf(c.rank);
+      const oldRank = c.rank; c.rank = RANKS[ri+1];
+      detail = { oldRank, newRank: c.rank };
+      break;
+    }
+    case 'redraw': {
+      const old = G.handCards[targetIdx];
+      if (!old) return { ok:false, reason:'invalid_target' };
+      const newCard = drawCard(G);
+      G.handCards[targetIdx] = newCard;
+      detail = { oldCard: cardStr(old), newCard: cardStr(newCard) };
+      break;
+    }
+    case 'color_to_red': {
+      const c = G.handCards[targetIdx];
+      if (!c) return { ok:false, reason:'invalid_target' };
+      const reds = ['diamond','heart'];
+      const newSuit = reds[Math.floor(Math.random()*2)];
+      const oldSuit = c.suit; c.suit = newSuit;
+      detail = { oldSuit, newSuit, symbol: SUIT_SYMBOLS[newSuit] };
+      break;
+    }
+    case 'color_to_black': {
+      const c = G.handCards[targetIdx];
+      if (!c) return { ok:false, reason:'invalid_target' };
+      const blacks = ['spade','club'];
+      const newSuit = blacks[Math.floor(Math.random()*2)];
+      const oldSuit = c.suit; c.suit = newSuit;
+      detail = { oldSuit, newSuit, symbol: SUIT_SYMBOLS[newSuit] };
+      break;
+    }
+    case 'suit_to_spade': {
+      const c = G.handCards[targetIdx];
+      if (!c) return { ok:false, reason:'invalid_target' };
+      const oldSuit = c.suit; c.suit = 'spade';
+      detail = { oldSuit, newSuit: 'spade' };
+      break;
+    }
+    case 'rank_swap': {
+      if (G.handCards.length < 2) return { ok:false, reason:'need_two' };
+      const i = Math.floor(Math.random()*G.handCards.length);
+      let j; do { j=Math.floor(Math.random()*G.handCards.length); } while(j===i);
+      const tmp = G.handCards[i].rank;
+      G.handCards[i].rank = G.handCards[j].rank;
+      G.handCards[j].rank = tmp;
+      detail = { swappedIndices: [i,j] };
+      break;
+    }
+    case 'rank_down_draw': {
+      const c = G.handCards[targetIdx];
+      if (!c) return { ok:false, reason:'invalid_target' };
+      if (c.rank==='2') return { ok:false, reason:'rank_min' };
+      const ri = RANKS.indexOf(c.rank);
+      const oldRank = c.rank; c.rank = RANKS[ri-1];
+      const extra = drawCard(G);
+      G.handCards.push(extra);
+      detail = { oldRank, newRank: c.rank, drawnCard: cardStr(extra) };
+      break;
+    }
+    default: return { ok:false, reason:'unknown_action' };
+  }
+
+  G.extraItemUsedThisRound = true;
+  G.extraItemSlot = null;
+  computeRoundCost(G);
+  addLog(G, `extra_item:${itemId}`);
+  return { ok: true, detail };
+}
+
+// ─────────────────────────────────────────────
+// PRE-BET (v4 — bet before seeing cards)
 // ─────────────────────────────────────────────
 function enterPreBet(G) {
   const preset  = DIFFICULTY_PRESETS[G.settings.difficulty];
@@ -533,13 +739,14 @@ function enterPreBet(G) {
   G.fieldCards  = [];
   G.revealedCount = 0;
   G.itemUsedThisRound = false;
+  G.extraItemUsedThisRound = false;
   G.lastResult  = null;
   G.betHeld     = 0;
   return G;
 }
 
 // ─────────────────────────────────────────────
-// CONFIRM BET & DEAL (v3)
+// CONFIRM BET & DEAL (v4)
 // ─────────────────────────────────────────────
 function confirmBetAndDeal(G) {
   if (G.phase !== 'preBet') return false;
@@ -559,16 +766,10 @@ function confirmBetAndDeal(G) {
   G.revealedCount = 2;
   G.phase       = 'betting';
   G.itemUsedThisRound = false;
+  G.extraItemUsedThisRound = false;
   G.lastResult  = null;
 
-  // Grant item on round 1 or every 10 rounds
-  if (G.round===1 || G.round>=G.nextItemAtRound) {
-    if (G.heldItem===null) {
-      const pool=shuffle(ITEM_DEFS.map(d=>d.id));
-      G.heldItem=pool[0];
-    }
-    if (G.round>=G.nextItemAtRound) G.nextItemAtRound+=10;
-  }
+  // v4: Items are now given via selection system, not automatic grants here
 
   computeRoundCost(G);
   addLog(G,`round_start:${G.round}`);
@@ -620,13 +821,12 @@ function revealNext(G) {
 }
 
 // ─────────────────────────────────────────────
-// PLACE BET (settle)
+// PLACE BET (settle) — v4: no points
 // ─────────────────────────────────────────────
 function placeBet(G) {
   if (G.phase!=='betting') return null;
   G.phase='resolving';
   const result  = computeReturn(G);
-  const preset  = DIFFICULTY_PRESETS[G.settings.difficulty];
 
   // Return formula: -bet (already deducted at preBet) + bet*mult (winnings) - roundCost
   // So net = bet*(mult - 1) - roundCost  (at mult=1x you just recover your bet)
@@ -636,15 +836,11 @@ function placeBet(G) {
 
   G.life = Math.max(0, +(G.life + netGain).toFixed(2));
 
-  // Fixed points per hand type + small bonus from difficulty
-  const pts = Math.floor((HAND_POINTS[result.key]||0) * preset.pointMult);
-  G.totalPoints += pts;
-
   G.lastResult = {
     type:'bet', handKey:result.key, mult:result.mult,
     lifeGain:winnings, lifeCost:G.roundCost, netGain,
-    totalReturn:winnings, betReturned:0, // bet is NOT returned separately; winnings already include it at 1x
-    pointsEarned:pts, suitBonus:result.suitBonus,
+    totalReturn:winnings, betReturned:0,
+    suitBonus:result.suitBonus,
     rankBonus:result.rankBonus,
     breakdown:result.breakdown, handMult:result.handMult,
     rarity:result.rarity, contributingIndices:result.contributingIndices,
@@ -656,7 +852,7 @@ function placeBet(G) {
 }
 
 // ─────────────────────────────────────────────
-// FOLD
+// FOLD — v4: no points
 // ─────────────────────────────────────────────
 function fold(G) {
   if (G.phase!=='betting') return null;
@@ -673,7 +869,7 @@ function fold(G) {
   G.life = Math.max(0, +(G.life + recovery).toFixed(2));
   G.lastResult = {
     type:'fold', lifeCost, betRecovered:halfBet, betLost:+(G.betHeld*0.5).toFixed(2),
-    netGain:recovery, lifeAfter:G.life, pointsEarned:0,
+    netGain:recovery, lifeAfter:G.life,
     betAmount:G.betHeld,
   };
   G.betHeld = 0;
@@ -682,34 +878,15 @@ function fold(G) {
 }
 
 // ─────────────────────────────────────────────
-// ADVANCE ROUND
+// ADVANCE ROUND — v4: just increment round, no points
 // ─────────────────────────────────────────────
 function advanceRound(G) {
   G.round++;
-  // Fixed round bonus: 5 + round number
-  const pts = 5 + G.round;
-  G.totalPoints += pts;
-  return pts;
+  return G.round;
 }
 
 // ─────────────────────────────────────────────
-// PASSIVE SHOP
-// ─────────────────────────────────────────────
-function buyPassive(G, id) {
-  const def=PASSIVE_DEFS.find(p=>p.id===id);
-  if (!def) return {ok:false,reason:'not_found'};
-  const lv=G.passives[id]||0;
-  if (lv>=def.maxLv) return {ok:false,reason:'maxed'};
-  const cost=def.costs[lv];
-  if (G.totalPoints<cost) return {ok:false,reason:'no_points'};
-  G.totalPoints-=cost;
-  G.passives[id]=(G.passives[id]||0)+1;
-  addLog(G,`passive:${id}:${G.passives[id]}`);
-  return {ok:true,newLevel:G.passives[id]};
-}
-
-// ─────────────────────────────────────────────
-// ITEM SYSTEM
+// ITEM SYSTEM (heldItem)
 // ─────────────────────────────────────────────
 function getItemTargets(G, itemId) {
   const def=ITEM_DEFS.find(d=>d.id===itemId);
@@ -824,14 +1001,19 @@ function getItemDef(id)    { return ITEM_DEFS.find(d=>d.id===id); }
 // EXPORT
 // ─────────────────────────────────────────────
 const VidaGame = {
-  DIFFICULTY_PRESETS, PASSIVE_DEFS, ITEM_DEFS, HAND_MULTS, HAND_POINTS, HAND_RARITY,
+  DIFFICULTY_PRESETS, PASSIVE_DEFS, ITEM_DEFS, HAND_MULTS, HAND_RARITY,
   SUIT_SYMBOLS, SUIT_ORDER, SUIT_PER_CARD, RANKS, RANK_VAL, BLACK_SUITS, RED_SUITS,
-  initGame, enterPreBet, confirmBetAndDeal, revealNext, placeBet, fold, advanceRound,
-  adjustBet, buyPassive, useItem, getItemTargets, isGameOver,
+  initGame, initInfinityGame, enterPreBet, confirmBetAndDeal, revealNext, placeBet, fold, advanceRound,
+  adjustBet, useItem, useExtraItem, getItemTargets, isGameOver,
   computeReturn, computeRoundCost, getBestHand, getAllCards,
   getPassiveEffect, getSuitBonus, getRankBonus,
   getHandName, getPassiveDef, getItemDef,
   cardStr, shuffle, makeDeck,
+  // v4 new exports
+  shouldShowPassiveSelection, generatePassiveOffers, selectPassive,
+  shouldShowItemSelection, generateItemOffers, selectItem,
+  shouldShowShop, generateShopOffers, buyShopItem,
+  checkRoundCap, getBackgroundStage,
 };
 if (typeof module!=='undefined'&&module.exports) module.exports=VidaGame;
 if (typeof window!=='undefined') window.VidaGame=VidaGame;

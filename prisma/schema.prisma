@@ -1,25 +1,11 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 🔧 LOCAL DEVELOPMENT (SQLite) — Default
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 🚀 PRODUCTION (PostgreSQL) — Deploy 시 아래로 교체
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// datasource db {
-//   provider = "postgresql"
-//   url      = env("DATABASE_URL")
-// }
 
 model LeaderboardEntry {
   id         String   @id @default(cuid())
@@ -27,5 +13,7 @@ model LeaderboardEntry {
   points     Int
   round      Int
   difficulty String
+  mode       String   @default("normal")
+  life       Float    @default(0)
   createdAt  DateTime @default(now())
 }
