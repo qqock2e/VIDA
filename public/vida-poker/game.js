@@ -45,10 +45,10 @@ const SUIT_PER_CARD = { spade:0.04, diamond:0.03, heart:0.025, club:0.015 };
  * maxRound         : round cap for normal mode (infinity mode has no cap)
  */
 const DIFFICULTY_PRESETS = {
-  easy:   { baseBet:2.0, startLife:20, baseCostPerRound:1.0, revealPenalty:0.30, roundCostGrowth:0.35, lifeDrainRate:0.04, maxRound:100 },
-  normal: { baseBet:1.8, startLife:20, baseCostPerRound:1.5, revealPenalty:0.45, roundCostGrowth:0.50, lifeDrainRate:0.07, maxRound:100 },
-  hard:   { baseBet:1.6, startLife:20, baseCostPerRound:2.0, revealPenalty:0.60, roundCostGrowth:0.70, lifeDrainRate:0.11, maxRound:100 },
-  insane: { baseBet:1.4, startLife:20, baseCostPerRound:2.8, revealPenalty:0.85, roundCostGrowth:1.00, lifeDrainRate:0.16, maxRound:100 },
+  easy:   { baseBet:2.0, startLife:30, baseCostPerRound:1.0, revealPenalty:0.30, roundCostGrowth:0.25, lifeDrainRate:0.04, maxRound:50 },
+  normal: { baseBet:1.8, startLife:25, baseCostPerRound:1.5, revealPenalty:0.45, roundCostGrowth:0.30, lifeDrainRate:0.07, maxRound:50 },
+  hard:   { baseBet:1.6, startLife:20, baseCostPerRound:2.0, revealPenalty:0.60, roundCostGrowth:0.50, lifeDrainRate:0.09, maxRound:50 },
+  insane: { baseBet:1.4, startLife:20, baseCostPerRound:2.5, revealPenalty:0.75, roundCostGrowth:0.80, lifeDrainRate:0.13, maxRound:50 },
 };
 
 /**
@@ -59,15 +59,18 @@ const DIFFICULTY_PRESETS = {
  */
 const HAND_MULTS = {
   highCard:      0,
-  onePair:       0.4,
-  twoPair:       0.7,
-  threeOfAKind:  1.0,
-  straight:      1.4,
-  flush:         1.2,
-  fullHouse:     1.8,
-  fourOfAKind:   3.0,
-  straightFlush: 5.0,
-  royalFlush:    8.0,
+  onePair:       0.6,
+  twoPair:       0.9,
+  threeOfAKind:  1.2,
+  backStraight:  1.0,
+  straight:      1.5,
+  mountain:      1.7,
+  flush:         1.3,
+  fullHouse:     1.9,
+  fourOfAKind:   3.2,
+  backStraightFlush: 3.5,
+  straightFlush: 5.5,
+  royalFlush:    8.5,
 };
 
 const HAND_NAMES_I18N = {
@@ -75,10 +78,13 @@ const HAND_NAMES_I18N = {
   onePair:       { en:'One Pair',         ko:'원 페어'            },
   twoPair:       { en:'Two Pair',         ko:'투 페어'            },
   threeOfAKind:  { en:'Three of a Kind',  ko:'트리플'             },
+  backStraight:  { en:'Back Straight',    ko:'백 스트레이트'       },
   straight:      { en:'Straight',         ko:'스트레이트'          },
+  mountain:      { en:'Mountain',         ko:'마운틴'             },
   flush:         { en:'Flush',            ko:'플러시'             },
   fullHouse:     { en:'Full House',       ko:'풀 하우스'          },
   fourOfAKind:   { en:'Four of a Kind',   ko:'포 카드'            },
+  backStraightFlush: { en:'Back Straight Flush', ko:'백 스트레이트 플러시' },
   straightFlush: { en:'Straight Flush',   ko:'스트레이트 플러시'   },
   royalFlush:    { en:'Royal Flush',      ko:'로열 플러시'         },
 };
@@ -89,10 +95,13 @@ const HAND_RARITY = {
   onePair:       'common',
   twoPair:       'uncommon',
   threeOfAKind:  'uncommon',
+  backStraight:  'uncommon',
   straight:      'rare',
+  mountain:      'rare',
   flush:         'rare',
   fullHouse:     'epic',
   fourOfAKind:   'epic',
+  backStraightFlush: 'epic',
   straightFlush: 'legendary',
   royalFlush:    'legendary',
 };
@@ -271,25 +280,37 @@ function evaluateHand(cards) {
   for (const r of ranks) rankCnt[r]=(rankCnt[r]||0)+1;
   for (const s of suits) suitCnt[s]=(suitCnt[s]||0)+1;
   const counts   = Object.values(rankCnt).sort((a,b)=>b-a);
-  const isFlush  = Object.keys(suitCnt).length===1;
+  // Flush requires 5+ cards all same suit (fix: was triggering with <5 cards)
+  const isFlush  = cards.length>=5 && Object.keys(suitCnt).length===1;
   const uniqR    = [...new Set(ranks)].sort((a,b)=>b-a);
   let isStraight = false;
+  let isBackStraight = false;
+  let isMountain = false;
   if (cards.length>=5 && uniqR.length===5) {
     isStraight = (uniqR[0]-uniqR[4]===4);
-    if (!isStraight && uniqR[0]===14) isStraight = (uniqR.join()===('14,5,4,3,2'));
+    // Mountain: A-K-Q-J-10
+    if (isStraight && uniqR[0]===14 && uniqR[4]===10) isMountain = true;
+    // Back Straight: A-2-3-4-5
+    if (!isStraight && uniqR[0]===14 && uniqR.join()==='14,5,4,3,2') {
+      isStraight = true;
+      isBackStraight = true;
+    }
   }
   const topRank = ranks[0];
   let key, score;
-  if      (isFlush&&isStraight&&topRank===14) { key='royalFlush';    score=10000; }
-  else if (isFlush&&isStraight)               { key='straightFlush'; score=9000+topRank; }
-  else if (counts[0]===4)                     { key='fourOfAKind';   score=8000+topRank; }
-  else if (counts[0]===3&&counts[1]===2)      { key='fullHouse';     score=7000+topRank; }
-  else if (isFlush)                           { key='flush';         score=6000+topRank; }
-  else if (isStraight)                        { key='straight';      score=5000+topRank; }
-  else if (counts[0]===3)                     { key='threeOfAKind';  score=4000+topRank; }
-  else if (counts[0]===2&&counts[1]===2)      { key='twoPair';       score=3000+topRank; }
-  else if (counts[0]===2)                     { key='onePair';       score=2000+topRank; }
-  else                                        { key='highCard';      score=1000+topRank; }
+  if      (isFlush&&isStraight&&isMountain)    { key='royalFlush';       score=10000; }
+  else if (isFlush&&isBackStraight)             { key='backStraightFlush'; score=4500+topRank; }
+  else if (isFlush&&isStraight)                 { key='straightFlush';     score=9000+topRank; }
+  else if (counts[0]===4)                       { key='fourOfAKind';       score=8000+topRank; }
+  else if (counts[0]===3&&counts[1]===2)        { key='fullHouse';         score=7000+topRank; }
+  else if (isFlush)                             { key='flush';             score=6000+topRank; }
+  else if (isMountain)                          { key='mountain';          score=5500+topRank; }
+  else if (isStraight&&!isBackStraight)         { key='straight';          score=5000+topRank; }
+  else if (isBackStraight)                      { key='backStraight';      score=1500; }
+  else if (counts[0]===3)                       { key='threeOfAKind';      score=4000+topRank; }
+  else if (counts[0]===2&&counts[1]===2)        { key='twoPair';           score=3000+topRank; }
+  else if (counts[0]===2)                       { key='onePair';           score=2000+topRank; }
+  else                                          { key='highCard';          score=1000+topRank; }
 
   const contributingCards = getContributingCards(cards, key, rankCnt, suitCnt);
   return { key, mult:HAND_MULTS[key]||0, score, ranks, contributingCards };
@@ -297,7 +318,7 @@ function evaluateHand(cards) {
 
 function getContributingCards(cards, key, rankCnt, suitCnt) {
   switch(key) {
-    case 'royalFlush': case 'straightFlush': case 'flush': case 'straight':
+    case 'royalFlush': case 'backStraightFlush': case 'straightFlush': case 'flush': case 'straight': case 'mountain': case 'backStraight':
       return cards.map((_,i)=>i);
     case 'fourOfAKind': {
       const r=Object.entries(rankCnt).find(([,v])=>v===4)?.[0];
@@ -382,12 +403,11 @@ function getPassiveEffect(passives) {
 function computeRoundCost(G) {
   const preset  = DIFFICULTY_PRESETS[G.settings.difficulty];
   const passive = getPassiveEffect(G.passives);
-  let cost = preset.baseCostPerRound + (G.round-1)*preset.roundCostGrowth;
+  const baseCost = preset.baseCostPerRound + (G.round-1)*preset.roundCostGrowth;
+  // Bidirectional life scaling: high life = more drain, low life = less drain
+  const lifeScale = 1 + (G.life / preset.startLife - 1) * preset.lifeDrainRate;
   const extraReveals = Math.max(0, G.revealedCount-2);
-  cost += extraReveals*preset.revealPenalty;
-  // Life-scaling drain: extra drain when Life exceeds starting Life
-  const lifeExcess = Math.max(0, G.life - preset.startLife);
-  cost += lifeExcess * preset.lifeDrainRate;
+  let cost = baseCost * lifeScale + extraReveals * preset.revealPenalty;
   if (passive.costReduction) cost *= (1-passive.costReduction);
   G.roundCost = +cost.toFixed(2);
   return G.roundCost;
@@ -506,6 +526,7 @@ function initGame(settings={}) {
     extraItemSlot: null,
     extraItemUsedThisRound: false,
     infinityMode: settings.infinityMode || false,
+    raiseUsed:  false,
     logs:       [],
     lastResult: null,
   };
@@ -768,6 +789,7 @@ function confirmBetAndDeal(G) {
   G.itemUsedThisRound = false;
   G.extraItemUsedThisRound = false;
   G.lastResult  = null;
+  G.raiseUsed   = false;
 
   // v4: Items are now given via selection system, not automatic grants here
 
@@ -981,6 +1003,36 @@ function useItem(G, targetIdx=-1) {
 }
 
 // ─────────────────────────────────────────────
+// RAISE BET (mid-game, once per round)
+// ─────────────────────────────────────────────
+function raiseBet(G) {
+  if (G.phase !== 'betting') return { ok: false, reason: 'wrong_phase' };
+  if (G.raiseUsed)           return { ok: false, reason: 'already_used' };
+  if (G.betHeld <= 0)        return { ok: false, reason: 'no_bet' };
+  const raiseAmount = +(G.betHeld * 0.2).toFixed(2);
+  if (raiseAmount <= 0)      return { ok: false, reason: 'too_small' };
+  if (G.life < raiseAmount)  return { ok: false, reason: 'not_enough_life' };
+  G.life = +(G.life - raiseAmount).toFixed(2);
+  G.betAmount = +(G.betAmount + raiseAmount).toFixed(2);
+  G.betHeld = +(G.betHeld + raiseAmount).toFixed(2);
+  G.raiseUsed = true;
+  computeRoundCost(G);
+  addLog(G, `raise:${raiseAmount}`);
+  return { ok: true, raiseAmount, newBetHeld: G.betHeld, newLife: G.life };
+}
+
+// ─────────────────────────────────────────────
+// INFINITY MILESTONE CHECK (every 50 rounds)
+// ─────────────────────────────────────────────
+function checkInfinityMilestone(G) {
+  if (!G.infinityMode) return null;
+  if (G.round > 0 && G.round % 50 === 0) {
+    return { lifeBonus: 5, extraItem: true };
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────
 // GAME OVER
 // ─────────────────────────────────────────────
 function isGameOver(G) { return G.life<=0; }
@@ -998,14 +1050,24 @@ function getPassiveDef(id) { return PASSIVE_DEFS.find(p=>p.id===id); }
 function getItemDef(id)    { return ITEM_DEFS.find(d=>d.id===id); }
 
 // ─────────────────────────────────────────────
+// SCORE CALCULATION (for leaderboard)
+// ─────────────────────────────────────────────
+function computeScore(G) {
+  const diffWeights = { easy:1, normal:2, hard:3, insane:5 };
+  const w = diffWeights[G.settings.difficulty] || 1;
+  const infinityBonus = G.infinityMode ? 1.5 : 1;
+  return Math.round((G.round * w * 100 + G.life * w * 10) * infinityBonus);
+}
+
+// ─────────────────────────────────────────────
 // EXPORT
 // ─────────────────────────────────────────────
 const VidaGame = {
   DIFFICULTY_PRESETS, PASSIVE_DEFS, ITEM_DEFS, HAND_MULTS, HAND_RARITY,
   SUIT_SYMBOLS, SUIT_ORDER, SUIT_PER_CARD, RANKS, RANK_VAL, BLACK_SUITS, RED_SUITS,
   initGame, initInfinityGame, enterPreBet, confirmBetAndDeal, revealNext, placeBet, fold, advanceRound,
-  adjustBet, useItem, useExtraItem, getItemTargets, isGameOver,
-  computeReturn, computeRoundCost, getBestHand, getAllCards,
+  adjustBet, raiseBet, useItem, useExtraItem, getItemTargets, isGameOver,
+  computeReturn, computeRoundCost, computeScore, getBestHand, getAllCards,
   getPassiveEffect, getSuitBonus, getRankBonus,
   getHandName, getPassiveDef, getItemDef,
   cardStr, shuffle, makeDeck,
@@ -1013,7 +1075,7 @@ const VidaGame = {
   shouldShowPassiveSelection, generatePassiveOffers, selectPassive,
   shouldShowItemSelection, generateItemOffers, selectItem,
   shouldShowShop, generateShopOffers, buyShopItem,
-  checkRoundCap, getBackgroundStage,
+  checkRoundCap, checkInfinityMilestone, getBackgroundStage,
 };
 if (typeof module!=='undefined'&&module.exports) module.exports=VidaGame;
 if (typeof window!=='undefined') window.VidaGame=VidaGame;

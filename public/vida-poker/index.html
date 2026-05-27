@@ -368,6 +368,7 @@ body::before{content:'';position:fixed;inset:0;background:
 .lb-name{font-size:.82rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .lb-meta{font-size:.6rem;color:var(--text-muted);margin-top:.1rem;}
 .lb-round{font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:700;color:var(--gold);flex-shrink:0;}
+.lb-score{font-family:'Orbitron',sans-serif;font-size:.75rem;font-weight:600;color:#c8a0ff;flex-shrink:0;}
 .lb-empty{text-align:center;color:var(--text-muted);padding:1.5rem;font-size:.82rem;}
 
 .hidden{display:none!important;}
@@ -562,6 +563,7 @@ body::before{content:'';position:fixed;inset:0;background:
       <div class="phase-info" id="phaseInfo">—</div>
       <button class="btn btn-purple btn-sm" id="btnItem" style="display:none;" onclick="openItemModal()">🎴 Item</button>
       <button class="btn btn-sm" id="btnExtraItem" style="display:none;background:rgba(255,152,96,.18);border-color:rgba(255,152,96,.4);color:#ff9860;" onclick="openExtraItemModal()">💎 Extra</button>
+      <button class="btn btn-purple btn-sm" id="btnRaise" style="display:none;" onclick="doRaise()">⬆ Raise</button>
     </div>
     <div class="glass-sm log-box" id="gameLog"></div>
   </div>
@@ -673,6 +675,19 @@ body::before{content:'';position:fixed;inset:0;background:
     <div class="modal-subtitle" id="itemSubtitle">Select a card</div>
     <div class="cards-row" id="cardTargetList"></div>
     <button class="btn" id="cancelCardBtn" onclick="cancelCardTarget()">Cancel</button>
+  </div>
+</div>
+
+<!-- MILESTONE REWARD (infinity mode) -->
+<div class="modal-overlay hidden" id="milestoneModal">
+  <div class="glass modal-box" style="text-align:center;">
+    <div class="modal-title" id="milestoneTitle">🌟 Milestone!</div>
+    <div style="font-size:.9rem;color:var(--text-muted);margin-bottom:1rem;" id="milestoneMsg">Round reached!</div>
+    <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.2rem;">
+      <div style="font-size:1.1rem;color:var(--green);" id="milestoneLife">+5 Life</div>
+      <div style="font-size:1.1rem;color:var(--purple);" id="milestoneItem">Extra item granted!</div>
+    </div>
+    <button class="btn btn-gold" id="btnMilestoneContinue" onclick="closeMilestone()">Continue</button>
   </div>
 </div>
 

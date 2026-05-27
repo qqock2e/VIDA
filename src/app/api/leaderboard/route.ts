@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
     // When no filters at all, group by difficulty — fetch up to 10 per difficulty
     if (!difficulty && !mode) {
       const allEntries = await db.leaderboardEntry.findMany({
-        orderBy: [{ round: 'desc' }, { life: 'desc' }],
+        orderBy: [{ points: 'desc' }, { round: 'desc' }, { life: 'desc' }],
       })
 
       // Group by difficulty, take top 10 per group
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
     // Specific filter(s) — return top 10
     const entries = await db.leaderboardEntry.findMany({
       where,
-      orderBy: [{ round: 'desc' }, { life: 'desc' }],
+      orderBy: [{ points: 'desc' }, { round: 'desc' }, { life: 'desc' }],
       take: 10,
     })
 

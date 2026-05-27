@@ -35,6 +35,15 @@ const UI_STRINGS = {
     btn_fold:'Fold',
     btn_item:'🎴 Item',
     btn_extra_item:'💎 Extra',
+    btn_raise:'⬆ Raise',
+    notif_raise:(amt)=>`Bet raised +${amt}♥!`,
+    notif_raise_used:'Raise already used this round!',
+    notif_raise_no_life:'Not enough Life to raise!',
+    milestone_title:'🌟 Milestone!',
+    milestone_msg:(r)=>`Round ${r} reached!`,
+    milestone_life:'+5 Life',
+    milestone_item:'Extra item granted!',
+    btn_continue:'Continue',
     btn_bet_minus:'−',
     phase_prebet:(round)=>`Round ${round} — Place your bet`,
     phase_betting:(round,revealed)=>`Round ${round} — ${revealed}/5 revealed`,
@@ -53,7 +62,7 @@ const UI_STRINGS = {
     go_nickname_label:'Enter your nickname',
     go_submit:'Register', go_submit_success:'Score registered!', go_submit_error:'Registration failed',
     go_already_submitted:'Already registered',
-    victory_title:'🎉 VICTORY!', victory_sub:'You survived 100 rounds!',
+    victory_title:'🎉 VICTORY!', victory_sub:'You survived 50 rounds!',
     victory_round_label:'Final Round', victory_life_label:'Remaining Life',
     victory_nickname_label:'Enter your nickname',
     victory_submit:'Register', victory_submit_success:'Score registered!', victory_submit_error:'Registration failed',
@@ -108,6 +117,15 @@ const UI_STRINGS = {
     btn_fold:'폴드',
     btn_item:'🎴 아이템',
     btn_extra_item:'💎 추가',
+    btn_raise:'⬆ 레이즈',
+    notif_raise:(amt)=>`베팅 증액 +${amt}♥!`,
+    notif_raise_used:'이번 라운드에는 이미 레이즈했습니다!',
+    notif_raise_no_life:'레이즈할 라이프가 부족합니다!',
+    milestone_title:'🌟 마일스톤!',
+    milestone_msg:(r)=>`라운드 ${r} 돌파!`,
+    milestone_life:'+5 라이프',
+    milestone_item:'추가 아이템 획득!',
+    btn_continue:'계속',
     btn_bet_minus:'−',
     phase_prebet:(round)=>`라운드 ${round} — 베팅하세요`,
     phase_betting:(round,revealed)=>`라운드 ${round} — 필드 ${revealed}/5 공개`,
@@ -126,7 +144,7 @@ const UI_STRINGS = {
     go_nickname_label:'닉네임을 입력하세요',
     go_submit:'등록', go_submit_success:'점수가 등록되었습니다!', go_submit_error:'등록에 실패했습니다',
     go_already_submitted:'이미 등록되었습니다',
-    victory_title:'🎉 승리!', victory_sub:'100라운드를 생존했습니다!',
+    victory_title:'🎉 승리!', victory_sub:'50라운드를 생존했습니다!',
     victory_round_label:'최종 라운드', victory_life_label:'남은 라이프',
     victory_nickname_label:'닉네임을 입력하세요',
     victory_submit:'등록', victory_submit_success:'점수가 등록되었습니다!', victory_submit_error:'등록에 실패했습니다',
@@ -325,22 +343,25 @@ function processRoundTransition() {
   if (VidaGame.isGameOver(G)) { showGameOver(); return; }
   // 2. Check victory
   if (VidaGame.checkRoundCap(G) === 'victory') { showVictory(); return; }
-  // 3. Passive selection
+  // 3. Check infinity milestone (every 50 rounds)
+  const milestone = VidaGame.checkInfinityMilestone(G);
+  if (milestone) { showMilestoneReward(milestone); return; }
+  // 4. Passive selection
   if (VidaGame.shouldShowPassiveSelection(G)) {
     showPassiveSelection();
     return;
   }
-  // 4. Item selection
+  // 5. Item selection
   if (VidaGame.shouldShowItemSelection(G)) {
     showItemSelection();
     return;
   }
-  // 5. Shop
+  // 6. Shop
   if (VidaGame.shouldShowShop(G) && G.round > 1) {
     showShopModal();
     return;
   }
-  // 6. Enter preBet
+  // 7. Enter preBet
   VidaGame.enterPreBet(G);
   updateBackground();
   renderAll();
@@ -365,6 +386,51 @@ function afterItemSelected() {
 }
 
 function afterShopDone() {
+  VidaGame.enterPreBet(G);
+  updateBackground();
+  renderAll();
+}
+
+// ─────────────────────────────────────────────
+// MILESTONE REWARD (infinity mode every 50 rounds)
+// ─────────────────────────────────────────────
+function showMilestoneReward(milestone) {
+  const modal = document.getElementById('milestoneModal');
+  if (!modal) { processRoundTransition(); return; }
+  document.getElementById('milestoneTitle').textContent = t('milestone_title');
+  document.getElementById('milestoneMsg').textContent = t('milestone_msg', G.round);
+  document.getElementById('milestoneLife').textContent = t('milestone_life');
+  document.getElementById('milestoneItem').textContent = t('milestone_item');
+  document.getElementById('btnMilestoneContinue').textContent = t('btn_continue');
+  // Apply rewards
+  G.life = +(G.life + milestone.lifeBonus).toFixed(2);
+  G.maxLife = +(G.maxLife + milestone.lifeBonus).toFixed(2);
+  if (milestone.extraItem) {
+    // Grant a random extra item
+    const offers = VidaGame.generateItemOffers(G);
+    if (offers.length) {
+      VidaGame.selectItem(G, offers[0].id);
+    }
+  }
+  sfx('victory');
+  modal.classList.remove('hidden');
+}
+
+function closeMilestone() {
+  document.getElementById('milestoneModal').classList.add('hidden');
+  // Continue to passive/item/shop/prebet flow
+  if (VidaGame.shouldShowPassiveSelection(G)) {
+    showPassiveSelection();
+    return;
+  }
+  if (VidaGame.shouldShowItemSelection(G)) {
+    showItemSelection();
+    return;
+  }
+  if (VidaGame.shouldShowShop(G) && G.round > 1) {
+    showShopModal();
+    return;
+  }
   VidaGame.enterPreBet(G);
   updateBackground();
   renderAll();
@@ -539,6 +605,22 @@ function adjustBet(mode) {
   if (!G) return;
   VidaGame.adjustBet(G, mode);
   renderPreBetBar();
+}
+
+// ─────────────────────────────────────────────
+// RAISE BET
+// ─────────────────────────────────────────────
+function doRaise() {
+  if (!G || G.phase !== 'betting') return;
+  const res = VidaGame.raiseBet(G);
+  if (!res.ok) {
+    if (res.reason === 'already_used') notify(t('notif_raise_used'), 'notif-red');
+    else if (res.reason === 'not_enough_life') notify(t('notif_raise_no_life'), 'notif-red');
+    return;
+  }
+  sfx('life_up');
+  notify(t('notif_raise', res.raiseAmount), 'notif-gold');
+  renderAll();
 }
 
 // ─────────────────────────────────────────────
@@ -1011,7 +1093,7 @@ async function submitScore() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nickname,
-        points: 0,
+        points: VidaGame.computeScore(G),
         round: G.round,
         difficulty: G.settings.difficulty,
         mode: G.infinityMode ? 'infinity' : 'normal',
@@ -1081,7 +1163,7 @@ async function submitVictoryScore() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nickname,
-        points: 0,
+        points: VidaGame.computeScore(G),
         round: G.round,
         difficulty: G.settings.difficulty,
         mode: 'normal',
@@ -1197,12 +1279,14 @@ function createLbRow(entry, i) {
   const date = new Date(entry.createdAt).toLocaleDateString(lang==='ko'?'ko-KR':'en-US',{month:'short',day:'numeric'});
   const lifeStr = entry.life != null ? ` · ${entry.life}♥` : '';
   const modeStr = entry.mode === 'infinity' ? ' ∞' : '';
+  const scoreStr = entry.points > 0 ? `<div class="lb-score">${entry.points.toLocaleString()}</div>` : '';
   row.innerHTML = `
     <div class="lb-rank ${rankClass}">${rankIcon}</div>
     <div class="lb-info">
       <div class="lb-name">${entry.nickname}</div>
       <div class="lb-meta">${date}${lifeStr}${modeStr}</div>
     </div>
+    ${scoreStr}
     <div class="lb-round">Rd.${entry.round}</div>
   `;
   return row;
@@ -1406,6 +1490,13 @@ function renderButtons() {
   document.getElementById('btnItem').textContent = t('btn_item');
   document.getElementById('btnExtraItem').style.display = isBetting && G.extraItemSlot && !G.extraItemUsedThisRound ? '' : 'none';
   document.getElementById('btnExtraItem').textContent = t('btn_extra_item');
+
+  // Raise button: only during betting, not already used
+  const btnRaise = document.getElementById('btnRaise');
+  if (btnRaise) {
+    btnRaise.style.display = isBetting && !G.raiseUsed ? '' : 'none';
+    btnRaise.textContent = t('btn_raise');
+  }
 
   // Phase info
   const phaseEl = document.getElementById('phaseInfo');
