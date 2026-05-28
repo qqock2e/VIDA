@@ -34,20 +34,20 @@ const RED_SUITS   = new Set(['diamond','heart']);
 const SUIT_PER_CARD = { spade:0.04, diamond:0.03, heart:0.025, club:0.015 };
 
 /**
- * Difficulty presets — v4
+ * Difficulty presets — v5
  *
- * baseBet          : base life units the player wagers each hand
- * startLife        : always 20
- * baseCostPerRound : life drained per round at round 1
- * revealPenalty    : extra drain added per field card revealed beyond the 2 free ones
- * roundCostGrowth  : how much baseCost grows each round
- * lifeDrainRate    : extra drain per unit of Life exceeding starting Life (prevents snowball)
- * maxRound         : round cap for normal mode (infinity mode has no cap)
+ * baseBet        : base life units the player wagers each hand
+ * startLife      : always 20
+ * roundStartCost : flat Life cost to START a round (deducted on deal, proportional to difficulty)
+ * baseDrain      : base drain per round (flat, no round growth)
+ * revealDrain    : tiny extra drain per field card revealed beyond the 2 free ones
+ * lifeDrainRate  : extra drain per unit of Life exceeding starting Life (prevents snowball)
+ * maxRound       : round cap for normal mode (infinity mode has no cap)
  */
 const DIFFICULTY_PRESETS = {
-  easy:   { baseBet:2.0, startLife:30, baseCostPerRound:1.0, revealPenalty:0.30, roundCostGrowth:0.25, lifeDrainRate:0.04, maxRound:50 },
-  normal: { baseBet:1.8, startLife:25, baseCostPerRound:1.5, revealPenalty:0.45, roundCostGrowth:0.30, lifeDrainRate:0.07, maxRound:50 },
-  hard:   { baseBet:1.6, startLife:20, baseCostPerRound:2.0, revealPenalty:0.60, roundCostGrowth:0.50, lifeDrainRate:0.09, maxRound:50 },
+  easy:   { baseBet:1.4, startLife:30, baseCostPerRound:1.0, revealPenalty:0.30, roundCostGrowth:0.25, lifeDrainRate:0.04, maxRound:50 },
+  normal: { baseBet:1.4, startLife:25, baseCostPerRound:1.3, revealPenalty:0.45, roundCostGrowth:0.30, lifeDrainRate:0.07, maxRound:50 },
+  hard:   { baseBet:1.4, startLife:20, baseCostPerRound:1.8, revealPenalty:0.60, roundCostGrowth:0.50, lifeDrainRate:0.09, maxRound:50 },
   insane: { baseBet:1.4, startLife:20, baseCostPerRound:2.5, revealPenalty:0.75, roundCostGrowth:0.80, lifeDrainRate:0.13, maxRound:50 },
 };
 
@@ -59,17 +59,17 @@ const DIFFICULTY_PRESETS = {
  */
 const HAND_MULTS = {
   highCard:      0,
-  onePair:       0.6,
-  twoPair:       0.9,
-  threeOfAKind:  1.2,
-  backStraight:  1.0,
-  straight:      1.5,
-  mountain:      1.7,
-  flush:         1.3,
-  fullHouse:     1.9,
-  fourOfAKind:   3.2,
-  backStraightFlush: 3.5,
-  straightFlush: 5.5,
+  onePair:       0.7,
+  twoPair:       1.0,
+  threeOfAKind:  1.6,
+  backStraight:  2.5,
+  straight:      2.0,
+  mountain:      2.5,
+  flush:         1.7,
+  fullHouse:     2.2,
+  fourOfAKind:   3.4,
+  backStraightFlush: 5.5,
+  straightFlush: 3.5,
   royalFlush:    8.5,
 };
 
@@ -398,17 +398,16 @@ function getPassiveEffect(passives) {
 }
 
 // ─────────────────────────────────────────────
-// ROUND COST (v4 — with life-scaling drain)
+// ROUND COST (v5 — flat base drain + tiny reveal increments)
 // ─────────────────────────────────────────────
 function computeRoundCost(G) {
   const preset  = DIFFICULTY_PRESETS[G.settings.difficulty];
   const passive = getPassiveEffect(G.passives);
-  const baseCost = preset.baseCostPerRound + (G.round-1)*preset.roundCostGrowth;
-  // Bidirectional life scaling: high life = more drain, low life = less drain
+  // Base drain is flat (no round growth), plus tiny reveal increments
   const lifeScale = 1 + (G.life / preset.startLife - 1) * preset.lifeDrainRate;
-  const extraReveals = Math.max(0, G.revealedCount-2);
-  let cost = baseCost * lifeScale + extraReveals * preset.revealPenalty;
-  if (passive.costReduction) cost *= (1-passive.costReduction);
+  const extraReveals = Math.max(0, G.revealedCount - 2);
+  let cost = (preset.baseDrain + extraReveals * preset.revealDrain) * lifeScale;
+  if (passive.costReduction) cost *= (1 - passive.costReduction);
   G.roundCost = +cost.toFixed(2);
   return G.roundCost;
 }
@@ -526,7 +525,8 @@ function initGame(settings={}) {
     extraItemSlot: null,
     extraItemUsedThisRound: false,
     infinityMode: settings.infinityMode || false,
-    raiseUsed:  false,
+    roundStartCost: 0,
+    raiseStep:  0,
     logs:       [],
     lastResult: null,
   };
@@ -763,6 +763,8 @@ function enterPreBet(G) {
   G.extraItemUsedThisRound = false;
   G.lastResult  = null;
   G.betHeld     = 0;
+  G.roundStartCost = +(preset.roundStartCost).toFixed(2);
+  G.raiseStep   = 0;
   return G;
 }
 
@@ -781,6 +783,10 @@ function confirmBetAndDeal(G) {
   G.life = +(G.life - G.betAmount).toFixed(2);
   G.betHeld = G.betAmount; // track how much was held
 
+  // Deduct round start cost
+  const startCost = G.roundStartCost;
+  G.life = +(G.life - startCost).toFixed(2);
+
   G.deck        = shuffle(makeDeck());
   G.handCards   = [drawCard(G), drawCard(G)];
   G.fieldCards  = [drawCard(G),drawCard(G),drawCard(G),drawCard(G),drawCard(G)];
@@ -789,7 +795,7 @@ function confirmBetAndDeal(G) {
   G.itemUsedThisRound = false;
   G.extraItemUsedThisRound = false;
   G.lastResult  = null;
-  G.raiseUsed   = false;
+  G.raiseStep   = 0;
 
   // v4: Items are now given via selection system, not automatic grants here
 
@@ -832,13 +838,17 @@ function adjustBet(G, mode) {
 }
 
 // ─────────────────────────────────────────────
-// REVEAL
+// REVEAL (v5 — auto-settle on last card)
 // ─────────────────────────────────────────────
 function revealNext(G) {
   if (G.phase!=='betting'||G.revealedCount>=5) return false;
   G.revealedCount++;
   computeRoundCost(G);
   addLog(G,`reveal:${cardStr(G.fieldCards[G.revealedCount-1])}`);
+  // If last card revealed, auto-settle
+  if (G.revealedCount >= 5) {
+    return 'auto_settle';
+  }
   return true;
 }
 
@@ -1003,22 +1013,49 @@ function useItem(G, targetIdx=-1) {
 }
 
 // ─────────────────────────────────────────────
-// RAISE BET (mid-game, once per round)
+// RAISE BET (v5 — once per reveal step, supports all-in)
 // ─────────────────────────────────────────────
-function raiseBet(G) {
+function raiseBet(G, mode = 'raise') {
   if (G.phase !== 'betting') return { ok: false, reason: 'wrong_phase' };
-  if (G.raiseUsed)           return { ok: false, reason: 'already_used' };
-  if (G.betHeld <= 0)        return { ok: false, reason: 'no_bet' };
-  const raiseAmount = +(G.betHeld * 0.2).toFixed(2);
-  if (raiseAmount <= 0)      return { ok: false, reason: 'too_small' };
-  if (G.life < raiseAmount)  return { ok: false, reason: 'not_enough_life' };
+  if (G.raiseStep >= G.revealedCount - 1) return { ok: false, reason: 'no_raise_available' };
+  if (G.revealedCount >= 5) return { ok: false, reason: 'last_card' };
+
+  let raiseAmount;
+  if (mode === 'allin') {
+    raiseAmount = +G.life.toFixed(2);
+  } else {
+    raiseAmount = +(G.betHeld * 0.25).toFixed(2);
+  }
+
+  if (raiseAmount <= 0) return { ok: false, reason: 'too_small' };
+  if (G.life < raiseAmount) raiseAmount = +G.life.toFixed(2); // clamp
+
   G.life = +(G.life - raiseAmount).toFixed(2);
   G.betAmount = +(G.betAmount + raiseAmount).toFixed(2);
   G.betHeld = +(G.betHeld + raiseAmount).toFixed(2);
-  G.raiseUsed = true;
+  G.raiseStep++;
   computeRoundCost(G);
   addLog(G, `raise:${raiseAmount}`);
-  return { ok: true, raiseAmount, newBetHeld: G.betHeld, newLife: G.life };
+
+  const isAllIn = G.life <= 0;
+  return { ok: true, raiseAmount, newBetHeld: G.betHeld, newLife: G.life, isAllIn };
+}
+
+// ─────────────────────────────────────────────
+// SKIP ROUND (v5 — skip, only pay base drain)
+// ─────────────────────────────────────────────
+function skipRound(G) {
+  if (G.phase !== 'preBet') return { ok: false, reason: 'wrong_phase' };
+  const preset = DIFFICULTY_PRESETS[G.settings.difficulty];
+  const passive = getPassiveEffect(G.passives);
+  const lifeScale = 1 + (G.life / preset.startLife - 1) * preset.lifeDrainRate;
+  let drain = preset.baseDrain * lifeScale;
+  if (passive.costReduction) drain *= (1 - passive.costReduction);
+  drain = +drain.toFixed(2);
+  G.life = Math.max(0, +(G.life - drain).toFixed(2));
+  G.lastResult = { type: 'skip', lifeCost: drain, netGain: -drain, lifeAfter: G.life };
+  addLog(G, `skip:${drain}`);
+  return { ok: true, drain, newLife: G.life };
 }
 
 // ─────────────────────────────────────────────
@@ -1066,7 +1103,7 @@ const VidaGame = {
   DIFFICULTY_PRESETS, PASSIVE_DEFS, ITEM_DEFS, HAND_MULTS, HAND_RARITY,
   SUIT_SYMBOLS, SUIT_ORDER, SUIT_PER_CARD, RANKS, RANK_VAL, BLACK_SUITS, RED_SUITS,
   initGame, initInfinityGame, enterPreBet, confirmBetAndDeal, revealNext, placeBet, fold, advanceRound,
-  adjustBet, raiseBet, useItem, useExtraItem, getItemTargets, isGameOver,
+  adjustBet, raiseBet, skipRound, useItem, useExtraItem, getItemTargets, isGameOver,
   computeReturn, computeRoundCost, computeScore, getBestHand, getAllCards,
   getPassiveEffect, getSuitBonus, getRankBonus,
   getHandName, getPassiveDef, getItemDef,

@@ -36,6 +36,12 @@ const UI_STRINGS = {
     btn_item:'🎴 Item',
     btn_extra_item:'💎 Extra',
     btn_raise:'⬆ Raise',
+    btn_allin:'🔥 ALL IN',
+    btn_skip:'⏩ Skip Round',
+    skip_drain:'Skip drain',
+    round_start_cost:'Round start cost',
+    notif_allin:'All-in! Revealing all cards...',
+    notif_auto_settle:'Last card! Auto-settling...',
     notif_raise:(amt)=>`Bet raised +${amt}♥!`,
     notif_raise_used:'Raise already used this round!',
     notif_raise_no_life:'Not enough Life to raise!',
@@ -118,6 +124,12 @@ const UI_STRINGS = {
     btn_item:'🎴 아이템',
     btn_extra_item:'💎 추가',
     btn_raise:'⬆ 레이즈',
+    btn_allin:'🔥 올인',
+    btn_skip:'⏩ 라운드 스킵',
+    skip_drain:'스킵 차감',
+    round_start_cost:'라운드 시작 비용',
+    notif_allin:'올인! 모든 카드 공개...',
+    notif_auto_settle:'마지막 카드! 자동 정산...',
     notif_raise:(amt)=>`베팅 증액 +${amt}♥!`,
     notif_raise_used:'이번 라운드에는 이미 레이즈했습니다!',
     notif_raise_no_life:'레이즈할 라이프가 부족합니다!',
@@ -586,16 +598,41 @@ function confirmBetAndDeal() {
 }
 
 // ─────────────────────────────────────────────
-// REVEAL
+// SKIP ROUND (v5)
+// ─────────────────────────────────────────────
+function doSkip() {
+  if (!G || G.phase !== 'preBet') return;
+  const res = VidaGame.skipRound(G);
+  if (res.ok) {
+    notify(`${t('skip_drain')}: -${res.drain}♥`, 'notif-red');
+    sfx('fold');
+    if (VidaGame.isGameOver(G)) { showGameOver(); return; }
+    VidaGame.advanceRound(G);
+    processRoundTransition();
+  }
+}
+
+// ─────────────────────────────────────────────
+// REVEAL (v5 — handles auto-settle on last card)
 // ─────────────────────────────────────────────
 function revealNext() {
   if (!G||G.phase!=='betting') return;
   const prev=G.roundCost;
-  VidaGame.revealNext(G);
-  sfx('reveal');
-  animateRevealCard(G.revealedCount-1);
-  renderAll();
-  if (G.roundCost!==prev) notify(t('notif_reveal_pen',G.roundCost),'notif-red');
+  const result = VidaGame.revealNext(G);
+  if (result === 'auto_settle') {
+    sfx('reveal');
+    animateRevealCard(G.revealedCount-1);
+    renderAll();
+    notify(t('notif_auto_settle'), 'notif-gold');
+    setTimeout(() => settle(), 800);
+    return;
+  }
+  if (result) {
+    sfx('reveal');
+    animateRevealCard(G.revealedCount-1);
+    renderAll();
+    if (G.roundCost!==prev) notify(t('notif_reveal_pen',G.roundCost),'notif-red');
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -608,18 +645,45 @@ function adjustBet(mode) {
 }
 
 // ─────────────────────────────────────────────
-// RAISE BET
+// AUTO REVEAL AND SETTLE (v5 — for all-in)
 // ─────────────────────────────────────────────
-function doRaise() {
+function doAutoRevealAndSettle() {
   if (!G || G.phase !== 'betting') return;
-  const res = VidaGame.raiseBet(G);
+  notify(t('notif_allin'), 'notif-gold');
+  // Reveal all remaining cards
+  while (G.revealedCount < 5) {
+    G.revealedCount++;
+  }
+  VidaGame.computeRoundCost(G);
+  renderAll();
+  // Settle after animation
+  setTimeout(() => settle(), 1000);
+}
+
+// ─────────────────────────────────────────────
+// RAISE BET (v5 — per-reveal raise + all-in)
+// ─────────────────────────────────────────────
+function doRaise(mode = 'raise') {
+  if (!G || G.phase !== 'betting') return;
+  const res = VidaGame.raiseBet(G, mode);
   if (!res.ok) {
-    if (res.reason === 'already_used') notify(t('notif_raise_used'), 'notif-red');
-    else if (res.reason === 'not_enough_life') notify(t('notif_raise_no_life'), 'notif-red');
+    if (res.reason === 'no_raise_available') return; // silently fail
+    if (res.reason === 'not_enough_life') {
+      // Auto all-in since no life for raise -> auto-reveal all remaining
+      doAutoRevealAndSettle();
+      return;
+    }
+    if (res.reason === 'last_card') return;
+    notify(t('notif_raise_used'), 'notif-red');
     return;
   }
   sfx('life_up');
   notify(t('notif_raise', res.raiseAmount), 'notif-gold');
+  if (res.isAllIn) {
+    // All-in! Auto-reveal remaining cards and settle
+    doAutoRevealAndSettle();
+    return;
+  }
   renderAll();
 }
 
@@ -1405,6 +1469,9 @@ function renderPreBetSection() {
     document.getElementById('preBetTitle').textContent=t('prebet_title');
     document.getElementById('preBetInfo').textContent=t('prebet_info');
     document.getElementById('btnDeal').textContent=t('btn_deal') || '🃏 Deal Cards';
+    // Show round start cost info
+    const startCostEl = document.getElementById('preBetStartCost');
+    if (startCostEl) startCostEl.textContent = `${t('round_start_cost')}: ${G.roundStartCost}♥`;
     renderPreBetBar();
   } else {
     section.style.display='none';
@@ -1491,11 +1558,24 @@ function renderButtons() {
   document.getElementById('btnExtraItem').style.display = isBetting && G.extraItemSlot && !G.extraItemUsedThisRound ? '' : 'none';
   document.getElementById('btnExtraItem').textContent = t('btn_extra_item');
 
-  // Raise button: only during betting, not already used
+  // Raise button: available when raiseStep < revealedCount - 1, not on last card
+  const canRaise = isBetting && G.revealedCount < 5 && G.raiseStep < G.revealedCount - 1;
   const btnRaise = document.getElementById('btnRaise');
   if (btnRaise) {
-    btnRaise.style.display = isBetting && !G.raiseUsed ? '' : 'none';
+    btnRaise.style.display = canRaise ? '' : 'none';
     btnRaise.textContent = t('btn_raise');
+  }
+  // All-in button: same availability as raise
+  const btnAllIn = document.getElementById('btnAllIn');
+  if (btnAllIn) {
+    btnAllIn.style.display = canRaise ? '' : 'none';
+    btnAllIn.textContent = t('btn_allin');
+  }
+  // Skip button: only during preBet
+  const btnSkip = document.getElementById('btnSkip');
+  if (btnSkip) {
+    btnSkip.style.display = isPreBet ? '' : 'none';
+    btnSkip.textContent = t('btn_skip');
   }
 
   // Phase info

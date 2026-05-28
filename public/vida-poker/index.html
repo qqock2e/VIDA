@@ -501,6 +501,7 @@ body::before{content:'';position:fixed;inset:0;background:
   <div id="preBetSection" class="glass prebet-section" style="display:none;">
     <div class="prebet-title" id="preBetTitle">Place Your Bet</div>
     <div class="prebet-info" id="preBetInfo">Set your wager before the cards are dealt.</div>
+    <div id="preBetStartCost" style="font-size:.72rem;color:var(--orange);margin-bottom:.6rem;">Round start cost: 1.0♥</div>
     <div class="bet-row" id="preBetRow" style="display:flex;justify-content:center;margin-bottom:.8rem;">
       <span style="font-size:.68rem;color:var(--text-muted);white-space:nowrap;">BET</span>
       <div class="bet-amount-display" id="preBetAmountDisplay">2.0♥</div>
@@ -518,6 +519,9 @@ body::before{content:'';position:fixed;inset:0;background:
       </div>
     </div>
     <button class="btn btn-deal-large" id="btnDeal" onclick="confirmBetAndDeal()">🃏 Deal Cards</button>
+    <div style="display:flex;gap:.6rem;margin-top:.5rem;">
+      <button class="btn btn-red" style="flex:1;" id="btnSkip" onclick="doSkip()">⏩ Skip Round</button>
+    </div>
   </div>
 
   <!-- FIELD -->
@@ -563,7 +567,8 @@ body::before{content:'';position:fixed;inset:0;background:
       <div class="phase-info" id="phaseInfo">—</div>
       <button class="btn btn-purple btn-sm" id="btnItem" style="display:none;" onclick="openItemModal()">🎴 Item</button>
       <button class="btn btn-sm" id="btnExtraItem" style="display:none;background:rgba(255,152,96,.18);border-color:rgba(255,152,96,.4);color:#ff9860;" onclick="openExtraItemModal()">💎 Extra</button>
-      <button class="btn btn-purple btn-sm" id="btnRaise" style="display:none;" onclick="doRaise()">⬆ Raise</button>
+      <button class="btn btn-purple btn-sm" id="btnRaise" style="display:none;" onclick="doRaise('raise')">⬆ Raise</button>
+      <button class="btn btn-sm" id="btnAllIn" style="display:none;background:linear-gradient(135deg,rgba(232,65,65,.32),rgba(232,65,65,.08));border-color:rgba(232,65,65,.5);color:#ff9090;font-weight:700;" onclick="doRaise('allin')">🔥 ALL IN</button>
     </div>
     <div class="glass-sm log-box" id="gameLog"></div>
   </div>
