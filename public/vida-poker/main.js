@@ -30,14 +30,20 @@ const UI_STRINGS = {
     hud_life:'LIFE', hud_round:'ROUND', hud_cost_label:'Drain',
     hud_field:'⬡  Field Cards', hud_hand:'✦  Your Hand',
     hud_expected:'Expected return', hud_passives:'Passives:',
-    btn_reveal:'▶ Reveal Card',
-    btn_settle:'Settle',
+    btn_check:'✋ Check',
+    btn_bet:'⬆ Bet',
     btn_fold:'Fold',
+    btn_place_bet:'Place Bet',
+    btn_allin:'🔥 ALL IN',
+    bet_amount_label:'Bet Amount',
+    bet_current:'Current Bet',
+    bet_add_half:'Half',
+    bet_add_quarter:'¼',
+    bet_quick_add:'Quick',
     btn_item:'🎴 Item',
     btn_extra_item:'💎 Extra',
-    btn_raise:'⬆ Raise',
-    btn_allin:'🔥 ALL IN',
     btn_skip:'⏩ Skip Round',
+    btn_deal:'🃏 Deal Cards',
     skip_drain:'Skip drain',
     round_start_cost:'Round start cost',
     notif_allin:'All-in! Revealing all cards...',
@@ -51,13 +57,13 @@ const UI_STRINGS = {
     milestone_item:'Extra item granted!',
     btn_continue:'Continue',
     btn_bet_minus:'−',
-    phase_prebet:(round)=>`Round ${round} — Place your bet`,
+    phase_prebet:(round)=>`Round ${round} — Deal Cards`,
     phase_betting:(round,revealed)=>`Round ${round} — ${revealed}/5 revealed`,
     phase_processing:'Processing…',
     result_profit:'🎉 Profit!', result_loss:'📉 Loss', result_fold:'🏳 Fold',
     result_life_now:(l)=>`Life: ${l}♥`,
-    prebet_title:'Place Your Bet',
-    prebet_info:'Set your wager before the cards are dealt.',
+    prebet_title:'Deal Cards',
+    prebet_info:'Deal cards to start the round. You can bet during the round.',
     prebet_locked:'Bet locked: ♥',
     item_title:'🎴 Use Item', item_subtitle:'Select target card',
     item_no_target:'Using…', btn_cancel:'Cancel',
@@ -118,14 +124,20 @@ const UI_STRINGS = {
     hud_life:'라이프', hud_round:'라운드', hud_cost_label:'차감',
     hud_field:'⬡  필드 카드', hud_hand:'✦  내 패',
     hud_expected:'예상 수익', hud_passives:'패시브:',
-    btn_reveal:'▶ 카드 공개',
-    btn_settle:'정산하기',
+    btn_check:'✋ 체크',
+    btn_bet:'⬆ 베팅',
     btn_fold:'폴드',
+    btn_place_bet:'베팅하기',
+    btn_allin:'🔥 올인',
+    bet_amount_label:'베팅 금액',
+    bet_current:'현재 베팅',
+    bet_add_half:'절반',
+    bet_add_quarter:'¼',
+    bet_quick_add:'빠른',
     btn_item:'🎴 아이템',
     btn_extra_item:'💎 추가',
-    btn_raise:'⬆ 레이즈',
-    btn_allin:'🔥 올인',
     btn_skip:'⏩ 라운드 스킵',
+    btn_deal:'🃏 카드 배분',
     skip_drain:'스킵 차감',
     round_start_cost:'라운드 시작 비용',
     notif_allin:'올인! 모든 카드 공개...',
@@ -139,13 +151,13 @@ const UI_STRINGS = {
     milestone_item:'추가 아이템 획득!',
     btn_continue:'계속',
     btn_bet_minus:'−',
-    phase_prebet:(round)=>`라운드 ${round} — 베팅하세요`,
+    phase_prebet:(round)=>`라운드 ${round} — 카드 배분`,
     phase_betting:(round,revealed)=>`라운드 ${round} — 필드 ${revealed}/5 공개`,
     phase_processing:'처리 중…',
     result_profit:'🎉 수익!', result_loss:'📉 손실', result_fold:'🏳 폴드',
     result_life_now:(l)=>`라이프: ${l}♥`,
-    prebet_title:'베팅하세요',
-    prebet_info:'카드가 배분되기 전에 베팅액을 설정하세요.',
+    prebet_title:'카드 배분',
+    prebet_info:'카드를 배분하여 라운드를 시작합니다. 라운드 중에 베팅할 수 있습니다.',
     prebet_locked:'베팅 확정: ♥',
     item_title:'🎴 아이템 사용', item_subtitle:'대상 카드를 선택하세요',
     item_no_target:'사용 중…', btn_cancel:'취소',
@@ -579,8 +591,11 @@ function confirmBetAndDeal() {
   if (!G||G.phase!=='preBet') return;
   const prevLife = G.life;
   if (!VidaGame.confirmBetAndDeal(G)) return;
-  sfx('fold');
-  animateLifeChange(prevLife, G.life);
+  // Only roundStartCost is deducted now (no baseBet)
+  if (G.life !== prevLife) {
+    sfx('fold');
+    animateLifeChange(prevLife, G.life);
+  }
   renderAll();
   setTimeout(()=>{
     sfx('reveal'); sfx('reveal');
@@ -636,16 +651,97 @@ function revealNext() {
 }
 
 // ─────────────────────────────────────────────
-// BETTING (adjust bet)
+// CHECK (reveal next card without raising)
 // ─────────────────────────────────────────────
-function adjustBet(mode) {
-  if (!G) return;
-  VidaGame.adjustBet(G, mode);
-  renderPreBetBar();
+function doCheck() {
+  if (!G||G.phase!=='betting') return;
+  revealNext();
 }
 
 // ─────────────────────────────────────────────
-// AUTO REVEAL AND SETTLE (v5 — for all-in)
+// PLACE CUSTOM BET (v6 — bet any amount, then reveal)
+// ─────────────────────────────────────────────
+function doPlaceBet() {
+  if (!G||G.phase!=='betting') return;
+  const input = document.getElementById('betAmountInput');
+  if (!input) return;
+  let amount = parseFloat(input.value);
+  if (isNaN(amount) || amount <= 0) {
+    notify(t('notif_raise_no_life'),'notif-red');
+    return;
+  }
+  // Clamp to available life
+  if (amount > G.life) amount = G.life;
+  
+  const res = VidaGame.addBet(G, amount);
+  if (!res.ok) {
+    if (res.reason === 'not_enough_life' || res.reason === 'too_small') {
+      notify(t('notif_raise_no_life'),'notif-red');
+      return;
+    }
+    if (res.reason === 'last_card') return;
+    return;
+  }
+  sfx('life_up');
+  notify(t('notif_raise', res.betAmount), 'notif-gold');
+  
+  if (res.isAllIn) {
+    doAutoRevealAndSettle();
+    return;
+  }
+  // Now reveal the next card
+  revealNext();
+  // Reset input
+  input.value = '';
+  updateBetQuickButtons();
+}
+
+// ─────────────────────────────────────────────
+// ALL-IN (v6 — bet all remaining life)
+// ─────────────────────────────────────────────
+function doAllIn() {
+  if (!G||G.phase!=='betting') return;
+  const res = VidaGame.addBet(G, 'allin');
+  if (!res.ok) return;
+  sfx('life_up');
+  notify(t('notif_allin'), 'notif-gold');
+  doAutoRevealAndSettle();
+}
+
+// ─────────────────────────────────────────────
+// QUICK BET BUTTONS (v6 — add preset amounts to input)
+// ─────────────────────────────────────────────
+function setBetAmount(amount) {
+  const input = document.getElementById('betAmountInput');
+  if (!input) return;
+  if (amount === 'half') {
+    input.value = (G.life / 2).toFixed(1);
+  } else if (amount === 'quarter') {
+    input.value = (G.life / 4).toFixed(1);
+  } else if (amount === 'max') {
+    input.value = G.life.toFixed(1);
+  } else {
+    const current = parseFloat(input.value) || 0;
+    input.value = (current + amount).toFixed(1);
+  }
+  updateBetQuickButtons();
+}
+
+function updateBetQuickButtons() {
+  const input = document.getElementById('betAmountInput');
+  if (!input || !G) return;
+  const val = parseFloat(input.value) || 0;
+  // Update the place bet button to show the amount
+  const btnPlaceBet = document.getElementById('btnPlaceBet');
+  if (btnPlaceBet && val > 0) {
+    btnPlaceBet.textContent = `${t('btn_place_bet')} ♥${val.toFixed(1)}`;
+  } else if (btnPlaceBet) {
+    btnPlaceBet.textContent = t('btn_place_bet');
+  }
+}
+
+// ─────────────────────────────────────────────
+// AUTO REVEAL AND SETTLE (v6 — for all-in)
 // ─────────────────────────────────────────────
 function doAutoRevealAndSettle() {
   if (!G || G.phase !== 'betting') return;
@@ -658,33 +754,6 @@ function doAutoRevealAndSettle() {
   renderAll();
   // Settle after animation
   setTimeout(() => settle(), 1000);
-}
-
-// ─────────────────────────────────────────────
-// RAISE BET (v5 — per-reveal raise + all-in)
-// ─────────────────────────────────────────────
-function doRaise(mode = 'raise') {
-  if (!G || G.phase !== 'betting') return;
-  const res = VidaGame.raiseBet(G, mode);
-  if (!res.ok) {
-    if (res.reason === 'no_raise_available') return; // silently fail
-    if (res.reason === 'not_enough_life') {
-      // Auto all-in since no life for raise -> auto-reveal all remaining
-      doAutoRevealAndSettle();
-      return;
-    }
-    if (res.reason === 'last_card') return;
-    notify(t('notif_raise_used'), 'notif-red');
-    return;
-  }
-  sfx('life_up');
-  notify(t('notif_raise', res.raiseAmount), 'notif-gold');
-  if (res.isAllIn) {
-    // All-in! Auto-reveal remaining cards and settle
-    doAutoRevealAndSettle();
-    return;
-  }
-  renderAll();
 }
 
 // ─────────────────────────────────────────────
@@ -1446,19 +1515,8 @@ function renderStats() {
 }
 
 function renderPreBetBar() {
-  if (!G) return;
-  const preset=VidaGame.DIFFICULTY_PRESETS[G.settings.difficulty];
-  const passive=VidaGame.getPassiveEffect(G.passives);
-  const baseBet=+(preset.baseBet+(passive.betBonus||0)).toFixed(2);
-  const maxBet=G.life;
-  const minBet=Math.min(baseBet, maxBet);
-
-  const preBetDisplay = document.getElementById('preBetAmountDisplay');
-  if (preBetDisplay) preBetDisplay.textContent=G.betAmount.toFixed(1)+'♥';
-
-  const pct=maxBet>0?Math.min(100,((G.betAmount-minBet)/(maxBet-minBet||1))*100):0;
-  const fill=document.getElementById('preBetBarFill');
-  if (fill) fill.style.width=pct+'%';
+  // No longer needed — bet amount is auto-set on deal
+  // Kept as no-op for compatibility
 }
 
 function renderPreBetSection() {
@@ -1468,13 +1526,46 @@ function renderPreBetSection() {
     section.style.display='';
     document.getElementById('preBetTitle').textContent=t('prebet_title');
     document.getElementById('preBetInfo').textContent=t('prebet_info');
-    document.getElementById('btnDeal').textContent=t('btn_deal') || '🃏 Deal Cards';
+    document.getElementById('btnDeal').textContent=t('btn_deal');
     // Show round start cost info
     const startCostEl = document.getElementById('preBetStartCost');
     if (startCostEl) startCostEl.textContent = `${t('round_start_cost')}: ${G.roundStartCost}♥`;
-    renderPreBetBar();
+    // Hide bet row since bet is auto-set
+    const betRow = document.getElementById('preBetRow');
+    if (betRow) betRow.style.display='none';
+    // Show compact item info in preBet section
+    renderPreBetItemInfo();
   } else {
     section.style.display='none';
+  }
+}
+
+function renderPreBetItemInfo() {
+  // Held item
+  const itemInfo = document.getElementById('preBetItemInfo');
+  if (!itemInfo) return;
+  if (G.heldItem) {
+    const def=VidaGame.getItemDef(G.heldItem);
+    const name=def?(def.nameI18n[lang]||def.nameI18n.en):G.heldItem;
+    const desc=def?(def.descI18n[lang]||def.descI18n.en):'';
+    document.getElementById('preBetItemLabel').textContent=t('item_slot_label');
+    document.getElementById('preBetItemName').textContent=name;
+    document.getElementById('preBetItemDesc').textContent=desc;
+    itemInfo.style.display='';
+  } else {
+    itemInfo.style.display='none';
+  }
+  // Extra item
+  const extraInfo = document.getElementById('preBetExtraItemInfo');
+  if (!extraInfo) return;
+  if (G.extraItemSlot) {
+    const def=VidaGame.getItemDef(G.extraItemSlot);
+    const name=def?(def.nameI18n[lang]||def.nameI18n.en):G.extraItemSlot;
+    document.getElementById('preBetExtraItemLabel').textContent=t('extra_slot_label');
+    document.getElementById('preBetExtraItemName').textContent=name;
+    extraInfo.style.display='';
+  } else {
+    extraInfo.style.display='none';
   }
 }
 
@@ -1490,6 +1581,7 @@ function renderField() {
       el.appendChild(makeHiddenCard());
     }
   }
+  // During preBet, hide field section (cards not dealt yet)
   document.getElementById('fieldSection').style.display = G.phase==='preBet'?'none':'';
 }
 
@@ -1501,6 +1593,7 @@ function renderHand() {
   for (const c of G.handCards) {
     el.appendChild(makeCardEl(c));
   }
+  // During preBet, hide hand section (cards not dealt yet; item info shown in preBet section)
   document.getElementById('handSection').style.display = G.phase==='preBet'?'none':'';
 }
 
@@ -1509,8 +1602,17 @@ function renderHandResult() {
     document.getElementById('handName').textContent='—';
     document.getElementById('handMult').textContent='×0';
     document.getElementById('suitBonusRow').innerHTML='';
-    document.getElementById('expectedReturn').textContent='+0.00 ♥';
-    document.getElementById('betInfo').textContent='';
+    // During preBet, show round cost info
+    if (G.phase==='preBet') {
+      document.getElementById('expectedReturnLabel').textContent=t('drain_label');
+      document.getElementById('expectedReturn').textContent=`−${G.roundStartCost}♥`;
+      document.getElementById('expectedReturn').style.color='var(--red)';
+      document.getElementById('betInfo').textContent=`${t('drain_label')}: ${G.roundCost}♥`;
+    } else {
+      document.getElementById('expectedReturn').textContent='+0.00 ♥';
+      document.getElementById('expectedReturn').style.color='var(--green)';
+      document.getElementById('betInfo').textContent='';
+    }
     return;
   }
   const result=VidaGame.computeReturn(G);
@@ -1547,10 +1649,16 @@ function renderButtons() {
   const isBetting = G.phase==='betting';
   const isPreBet = G.phase==='preBet';
 
-  document.getElementById('btnReveal').style.display = isBetting && G.revealedCount<5 ? '' : 'none';
-  document.getElementById('btnReveal').textContent = t('btn_reveal');
-  document.getElementById('btnSettle').style.display = isBetting ? '' : 'none';
-  document.getElementById('btnSettle').textContent = t('btn_settle');
+  // Check button (reveal next card without betting)
+  const btnCheck = document.getElementById('btnCheck');
+  if (btnCheck) {
+    btnCheck.style.display = isBetting && G.revealedCount<5 ? '' : 'none';
+    btnCheck.textContent = t('btn_check');
+  }
+  // No separate Settle button — auto-settle on last card
+  const btnSettle = document.getElementById('btnSettle');
+  if (btnSettle) btnSettle.style.display = 'none';
+
   document.getElementById('btnFold').style.display = isBetting ? '' : 'none';
   document.getElementById('btnFold').textContent = t('btn_fold');
   document.getElementById('btnItem').style.display = isBetting && G.heldItem && !G.itemUsedThisRound ? '' : 'none';
@@ -1558,25 +1666,53 @@ function renderButtons() {
   document.getElementById('btnExtraItem').style.display = isBetting && G.extraItemSlot && !G.extraItemUsedThisRound ? '' : 'none';
   document.getElementById('btnExtraItem').textContent = t('btn_extra_item');
 
-  // Raise button: available when raiseStep < revealedCount - 1, not on last card
-  const canRaise = isBetting && G.revealedCount < 5 && G.raiseStep < G.revealedCount - 1;
-  const btnRaise = document.getElementById('btnRaise');
-  if (btnRaise) {
-    btnRaise.style.display = canRaise ? '' : 'none';
-    btnRaise.textContent = t('btn_raise');
+  // Bet input section (v6 — custom bet amount)
+  const betSection = document.getElementById('betInputSection');
+  if (betSection) {
+    betSection.style.display = isBetting && G.revealedCount < 5 ? '' : 'none';
   }
-  // All-in button: same availability as raise
+
+  // Current bet display
+  const betCurrentEl = document.getElementById('betCurrentDisplay');
+  if (betCurrentEl) {
+    betCurrentEl.style.display = isBetting ? '' : 'none';
+    if (isBetting) {
+      betCurrentEl.textContent = `${t('bet_current')}: ♥${G.betHeld.toFixed(1)}`;
+    }
+  }
+
+  // Place Bet button
+  const btnPlaceBet = document.getElementById('btnPlaceBet');
+  if (btnPlaceBet) {
+    btnPlaceBet.style.display = isBetting && G.revealedCount < 5 ? '' : 'none';
+    const input = document.getElementById('betAmountInput');
+    const val = input ? parseFloat(input.value) || 0 : 0;
+    btnPlaceBet.textContent = val > 0 ? `${t('btn_place_bet')} ♥${val.toFixed(1)}` : t('btn_place_bet');
+  }
+
+  // All-in button
   const btnAllIn = document.getElementById('btnAllIn');
   if (btnAllIn) {
-    btnAllIn.style.display = canRaise ? '' : 'none';
+    btnAllIn.style.display = isBetting && G.revealedCount < 5 ? '' : 'none';
     btnAllIn.textContent = t('btn_allin');
   }
+
+  // Quick bet buttons visibility
+  const quickBetRow = document.getElementById('quickBetRow');
+  if (quickBetRow) {
+    quickBetRow.style.display = isBetting && G.revealedCount < 5 ? '' : 'none';
+  }
+
   // Skip button: only during preBet
   const btnSkip = document.getElementById('btnSkip');
   if (btnSkip) {
     btnSkip.style.display = isPreBet ? '' : 'none';
     btnSkip.textContent = t('btn_skip');
   }
+
+  // Old Bet/AllIn buttons - hide them
+  const btnBet = document.getElementById('btnBet');
+  if (btnBet) btnBet.style.display = 'none';
 
   // Phase info
   const phaseEl = document.getElementById('phaseInfo');

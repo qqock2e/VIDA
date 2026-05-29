@@ -26,6 +26,10 @@
   --text:         #e8e8f0;
   --text-muted:   #7070a0;
 }
+/* Hide number input spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+input[type=number]{-moz-appearance:textfield;}
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Noto Sans KR',sans-serif;background:var(--bg1);color:var(--text);min-height:100vh;overflow-x:hidden;transition:background 1.2s ease;}
 body::before{content:'';position:fixed;inset:0;background:
@@ -397,6 +401,9 @@ body::before{content:'';position:fixed;inset:0;background:
   .bet-amount-display{font-size:1rem;min-width:70px;}
   .bet-btns{gap:.2rem;}
   .bet-btns .btn-xs{padding:.2rem .4rem;font-size:.65rem;}
+  #betAmountInput{font-size:.85rem;padding:.4rem .5rem;}
+  #quickBetRow .btn-xs{padding:.2rem .35rem;font-size:.62rem;}
+  #btnPlaceBet{padding:.4rem .7rem;font-size:.8rem;}
   .hand-mult{font-size:1.4rem;}
   .hand-name{font-size:.9rem;}
   .field-section,.hand-section,.action-section,.prebet-section{padding:.7rem .8rem;}
@@ -499,26 +506,20 @@ body::before{content:'';position:fixed;inset:0;background:
 
   <!-- PRE-BET SECTION -->
   <div id="preBetSection" class="glass prebet-section" style="display:none;">
-    <div class="prebet-title" id="preBetTitle">Place Your Bet</div>
-    <div class="prebet-info" id="preBetInfo">Set your wager before the cards are dealt.</div>
+    <div class="prebet-title" id="preBetTitle">Deal Cards</div>
+    <div class="prebet-info" id="preBetInfo">Deal cards to start the round. You can bet during the round.</div>
     <div id="preBetStartCost" style="font-size:.72rem;color:var(--orange);margin-bottom:.6rem;">Round start cost: 1.0♥</div>
-    <div class="bet-row" id="preBetRow" style="display:flex;justify-content:center;margin-bottom:.8rem;">
-      <span style="font-size:.68rem;color:var(--text-muted);white-space:nowrap;">BET</span>
-      <div class="bet-amount-display" id="preBetAmountDisplay">2.0♥</div>
-      <div class="bet-bar-wrap"><div class="bet-bar-fill" id="preBetBarFill" style="width:0%"></div></div>
-      <div class="bet-btns">
-        <button class="btn btn-xs" onclick="adjustBet('+1')">+1</button>
-        <button class="btn btn-xs" onclick="adjustBet('+5')">+5</button>
-        <button class="btn btn-xs" onclick="adjustBet('+10')">+10</button>
-        <button class="btn btn-xs" onclick="adjustBet('+100')">+100</button>
-        <button class="btn btn-xs" onclick="adjustBet('half')">½</button>
-        <button class="btn btn-xs btn-purple" onclick="adjustBet('allin')">ALL IN</button>
-        <button class="btn btn-xs btn-red" onclick="adjustBet('-10')">−10</button>
-        <button class="btn btn-xs btn-red" onclick="adjustBet('-5')">−5</button>
-        <button class="btn btn-xs btn-red" onclick="adjustBet('-1')">−1</button>
-      </div>
-    </div>
     <button class="btn btn-deal-large" id="btnDeal" onclick="confirmBetAndDeal()">🃏 Deal Cards</button>
+    <!-- Compact item display during preBet -->
+    <div id="preBetItemInfo" style="display:none;margin-top:.7rem;padding:.6rem .8rem;border-radius:10px;background:rgba(155,109,255,.07);border:1px solid rgba(155,109,255,.25);text-align:left;">
+      <div style="font-size:.6rem;letter-spacing:.1em;color:var(--text-muted);text-transform:uppercase;margin-bottom:.2rem;" id="preBetItemLabel">Held Item</div>
+      <div style="font-size:.82rem;color:#c8a0ff;font-weight:700;" id="preBetItemName">—</div>
+      <div style="font-size:.68rem;color:var(--text-muted);margin-top:.15rem;" id="preBetItemDesc"></div>
+    </div>
+    <div id="preBetExtraItemInfo" style="display:none;margin-top:.4rem;padding:.6rem .8rem;border-radius:10px;background:rgba(255,152,96,.07);border:1px solid rgba(255,152,96,.25);text-align:left;">
+      <div style="font-size:.6rem;letter-spacing:.1em;color:var(--text-muted);text-transform:uppercase;margin-bottom:.2rem;" id="preBetExtraItemLabel">Extra Item</div>
+      <div style="font-size:.82rem;color:var(--orange);font-weight:700;" id="preBetExtraItemName">—</div>
+    </div>
     <div style="display:flex;gap:.6rem;margin-top:.5rem;">
       <button class="btn btn-red" style="flex:1;" id="btnSkip" onclick="doSkip()">⏩ Skip Round</button>
     </div>
@@ -558,7 +559,32 @@ body::before{content:'';position:fixed;inset:0;background:
 
   <!-- ACTION AREA -->
   <div class="glass action-section" id="actionSection">
-    <button class="btn btn-reveal-large" id="btnReveal" style="display:none;" onclick="revealNext()">▶ Reveal Card</button>
+    <!-- Current Bet Display -->
+    <div id="betCurrentDisplay" style="display:none;text-align:center;font-family:'Orbitron',sans-serif;font-size:.95rem;color:var(--gold-light);margin-bottom:.5rem;letter-spacing:.06em;"></div>
+
+    <button class="btn btn-reveal-large" id="btnCheck" style="display:none;" onclick="doCheck()">✋ Check</button>
+
+    <!-- Bet Input Section (v6 — custom bet amount) -->
+    <div id="betInputSection" style="display:none;margin-bottom:.6rem;">
+      <div style="display:flex;gap:.4rem;align-items:center;margin-bottom:.4rem;">
+        <input type="number" id="betAmountInput" min="0" step="0.1" placeholder="0.0"
+          style="flex:1;padding:.5rem .7rem;border-radius:8px;border:1px solid rgba(212,168,67,.4);background:rgba(212,168,67,.07);color:var(--gold-light);font-family:'Orbitron',sans-serif;font-size:.95rem;outline:none;text-align:center;min-width:0;"
+          oninput="updateBetQuickButtons()"
+          onkeydown="if(event.key==='Enter')doPlaceBet()">
+        <button class="btn btn-gold" id="btnPlaceBet" style="width:auto;padding:.5rem 1rem;font-size:.88rem;white-space:nowrap;" onclick="doPlaceBet()">Place Bet</button>
+      </div>
+      <!-- Quick bet buttons -->
+      <div id="quickBetRow" style="display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.4rem;">
+        <button class="btn btn-xs" style="background:rgba(212,168,67,.1);border-color:rgba(212,168,67,.3);color:var(--gold-light);" onclick="setBetAmount(0.5)">+0.5</button>
+        <button class="btn btn-xs" style="background:rgba(212,168,67,.1);border-color:rgba(212,168,67,.3);color:var(--gold-light);" onclick="setBetAmount(1)">+1</button>
+        <button class="btn btn-xs" style="background:rgba(212,168,67,.1);border-color:rgba(212,168,67,.3);color:var(--gold-light);" onclick="setBetAmount(2)">+2</button>
+        <button class="btn btn-xs" style="background:rgba(212,168,67,.1);border-color:rgba(212,168,67,.3);color:var(--gold-light);" onclick="setBetAmount(5)">+5</button>
+        <button class="btn btn-xs" style="background:rgba(212,168,67,.15);border-color:rgba(212,168,67,.4);color:var(--gold-light);" onclick="setBetAmount('quarter')">¼</button>
+        <button class="btn btn-xs" style="background:rgba(212,168,67,.15);border-color:rgba(212,168,67,.4);color:var(--gold-light);" onclick="setBetAmount('half')">½</button>
+        <button class="btn btn-xs" style="background:rgba(232,65,65,.15);border-color:rgba(232,65,65,.4);color:#ff9090;font-weight:700;" onclick="doAllIn()">🔥 ALL IN</button>
+      </div>
+    </div>
+
     <div class="settle-fold-row">
       <button class="btn btn-settle-big" id="btnSettle" style="display:none;" onclick="settle()">Settle</button>
       <button class="btn btn-red btn-fold-half" id="btnFold" style="display:none;" onclick="foldRound()">Fold</button>
@@ -567,8 +593,9 @@ body::before{content:'';position:fixed;inset:0;background:
       <div class="phase-info" id="phaseInfo">—</div>
       <button class="btn btn-purple btn-sm" id="btnItem" style="display:none;" onclick="openItemModal()">🎴 Item</button>
       <button class="btn btn-sm" id="btnExtraItem" style="display:none;background:rgba(255,152,96,.18);border-color:rgba(255,152,96,.4);color:#ff9860;" onclick="openExtraItemModal()">💎 Extra</button>
-      <button class="btn btn-purple btn-sm" id="btnRaise" style="display:none;" onclick="doRaise('raise')">⬆ Raise</button>
-      <button class="btn btn-sm" id="btnAllIn" style="display:none;background:linear-gradient(135deg,rgba(232,65,65,.32),rgba(232,65,65,.08));border-color:rgba(232,65,65,.5);color:#ff9090;font-weight:700;" onclick="doRaise('allin')">🔥 ALL IN</button>
+      <!-- Old bet buttons kept hidden for compatibility -->
+      <button class="btn btn-purple btn-sm" id="btnBet" style="display:none;" onclick="doPlaceBet()">⬆ Bet</button>
+      <button class="btn btn-sm" id="btnAllIn" style="display:none;background:linear-gradient(135deg,rgba(232,65,65,.32),rgba(232,65,65,.08));border-color:rgba(232,65,65,.5);color:#ff9090;font-weight:700;" onclick="doAllIn()">🔥 ALL IN</button>
     </div>
     <div class="glass-sm log-box" id="gameLog"></div>
   </div>

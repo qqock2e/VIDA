@@ -45,11 +45,18 @@ const SUIT_PER_CARD = { spade:0.04, diamond:0.03, heart:0.025, club:0.015 };
  * maxRound       : round cap for normal mode (infinity mode has no cap)
  */
 const DIFFICULTY_PRESETS = {
-  easy:   { baseBet:1.4, startLife:30, baseCostPerRound:1.0, revealPenalty:0.30, roundCostGrowth:0.25, lifeDrainRate:0.04, maxRound:50 },
-  normal: { baseBet:1.4, startLife:25, baseCostPerRound:1.3, revealPenalty:0.45, roundCostGrowth:0.30, lifeDrainRate:0.07, maxRound:50 },
-  hard:   { baseBet:1.4, startLife:20, baseCostPerRound:1.8, revealPenalty:0.60, roundCostGrowth:0.50, lifeDrainRate:0.09, maxRound:50 },
-  insane: { baseBet:1.4, startLife:20, baseCostPerRound:2.5, revealPenalty:0.75, roundCostGrowth:0.80, lifeDrainRate:0.13, maxRound:50 },
+  easy:   { baseBet:1.4, startLife:35, roundStartCost:0.4, baseDrain:0.4, revealDrain:0.05, lifeDrainRate:0.05, maxRound:50 },
+  normal: { baseBet:1.4, startLife:25, roundStartCost:1.1, baseDrain:1.0, revealDrain:0.08, lifeDrainRate:0.07, maxRound:50 },
+  hard:   { baseBet:1.4, startLife:20, roundStartCost:1.5, baseDrain:1.5, revealDrain:0.08, lifeDrainRate:0.09, maxRound:50 },
+  insane: { baseBet:1.4, startLife:20, roundStartCost:2.0, baseDrain:2.0, revealDrain:0.1, lifeDrainRate:0.13, maxRound:50 },
 };
+
+// Safe preset getter — never returns undefined, fills missing props with normal defaults
+const _PRESET_DEFAULTS = DIFFICULTY_PRESETS.normal;
+function getPreset(difficulty) {
+  const raw = DIFFICULTY_PRESETS[difficulty] || _PRESET_DEFAULTS;
+  return Object.assign({}, _PRESET_DEFAULTS, raw);
+}
 
 /**
  * Hand multipliers — v4 (ADDITIVE system, starts at 0)
@@ -59,17 +66,17 @@ const DIFFICULTY_PRESETS = {
  */
 const HAND_MULTS = {
   highCard:      0,
-  onePair:       0.7,
-  twoPair:       1.0,
-  threeOfAKind:  1.6,
-  backStraight:  2.5,
-  straight:      2.0,
-  mountain:      2.5,
-  flush:         1.7,
-  fullHouse:     2.2,
-  fourOfAKind:   3.4,
-  backStraightFlush: 5.5,
-  straightFlush: 3.5,
+  onePair:       0.6,
+  twoPair:       0.9,
+  threeOfAKind:  1.2,
+  backStraight:  1.0,
+  straight:      1.5,
+  mountain:      1.7,
+  flush:         1.3,
+  fullHouse:     1.9,
+  fourOfAKind:   3.2,
+  backStraightFlush: 3.5,
+  straightFlush: 5.5,
   royalFlush:    8.5,
 };
 
@@ -125,8 +132,8 @@ const PASSIVE_DEFS = [
     id:'betBoost', maxLv:3,
     nameI18n:  { en:"Gambler's Soul",  ko:'도박사의 혼' },
     descI18n:  {
-      en:['Bet mult +0.08','Bet mult +0.15','Bet mult +0.25'],
-      ko:['베팅 배율 +0.08','베팅 배율 +0.15','베팅 배율 +0.25'],
+      en:['Bet effect +8%','Bet effect +15%','Bet effect +25%'],
+      ko:['베팅 효과 +8%','베팅 효과 +15%','베팅 효과 +25%'],
     },
     effect:(lv)=>({ betBonus:[0,0.08,0.15,0.25][lv] }),
   },
@@ -401,7 +408,7 @@ function getPassiveEffect(passives) {
 // ROUND COST (v5 — flat base drain + tiny reveal increments)
 // ─────────────────────────────────────────────
 function computeRoundCost(G) {
-  const preset  = DIFFICULTY_PRESETS[G.settings.difficulty];
+  const preset  = getPreset(G.settings.difficulty);
   const passive = getPassiveEffect(G.passives);
   // Base drain is flat (no round growth), plus tiny reveal increments
   const lifeScale = 1 + (G.life / preset.startLife - 1) * preset.lifeDrainRate;
@@ -435,6 +442,7 @@ function computeReturn(G) {
     rank:  {en:'Rank bonus', ko:'숫자 보너스'},
     alch:  {en:'Alchemist', ko:'연금술사'},
     hroll: {en:'High Roller', ko:'하이 롤러'},
+    gamb:  {en:"Gambler's Soul", ko:'도박사의 혼'},
   };
   const loc = G.settings.lang || 'en';
 
@@ -467,7 +475,14 @@ function computeReturn(G) {
   }
 
   totalMult = +totalMult.toFixed(4);
-  const lifeReturn  = +(G.betAmount * totalMult).toFixed(2);
+  // v6: betBonus is now a multiplier on the effective bet (no auto-bet at deal)
+  const betBonus = passive.betBonus || 0;
+  const effectiveBet = G.betAmount * (1 + betBonus);
+  if (betBonus > 0) {
+    const gambLabel = BONUS_LABELS_I18N.gamb[loc] || BONUS_LABELS_I18N.gamb.en;
+    breakdown.push({label:`${gambLabel} (×${(1+betBonus).toFixed(2)})`, value:betBonus, isPassive:true, isBetBonus:true});
+  }
+  const lifeReturn  = +(effectiveBet * totalMult).toFixed(2);
 
   // Map contributing cards back to full all-cards indices
   const contributingIndices = (hand.contributingCards||[]).map(i=>{
@@ -502,7 +517,7 @@ function drawCard(G) {
 // ─────────────────────────────────────────────
 function initGame(settings={}) {
   const difficulty = (settings.difficulty||'normal').toLowerCase();
-  const preset     = DIFFICULTY_PRESETS[difficulty]||DIFFICULTY_PRESETS.normal;
+  const preset     = getPreset(difficulty);
   const passive    = {};
   // Apply startLifeBonus from passives (lifeBonus passive may be pre-selected)
   const startLifeBonus = 0;
@@ -542,7 +557,7 @@ function initInfinityGame(settings={}) {
 }
 
 function checkRoundCap(G) {
-  const preset = DIFFICULTY_PRESETS[G.settings.difficulty];
+  const preset = getPreset(G.settings.difficulty);
   if (!G.infinityMode && G.round >= preset.maxRound) return 'victory';
   return 'continue';
 }
@@ -748,13 +763,7 @@ function useExtraItem(G, targetIdx=-1) {
 // PRE-BET (v4 — bet before seeing cards)
 // ─────────────────────────────────────────────
 function enterPreBet(G) {
-  const preset  = DIFFICULTY_PRESETS[G.settings.difficulty];
-  const passive = getPassiveEffect(G.passives);
-  const baseBet = +(preset.baseBet + (passive.betBonus||0)).toFixed(2);
-  // Minimum bet is the smaller of baseBet and current life (can't bet more than you have)
-  const minBet  = Math.min(baseBet, G.life);
-  G.betAmount   = minBet;
-  G.minBet      = minBet;
+  const preset  = getPreset(G.settings.difficulty);
   G.phase       = 'preBet';
   G.handCards   = [];
   G.fieldCards  = [];
@@ -763,29 +772,27 @@ function enterPreBet(G) {
   G.extraItemUsedThisRound = false;
   G.lastResult  = null;
   G.betHeld     = 0;
+  G.betAmount   = 0;
   G.roundStartCost = +(preset.roundStartCost).toFixed(2);
   G.raiseStep   = 0;
   return G;
 }
 
 // ─────────────────────────────────────────────
-// CONFIRM BET & DEAL (v4)
+// CONFIRM BET & DEAL (v6 — no auto-bet at start)
+// Player bets manually during the round after each reveal.
 // ─────────────────────────────────────────────
 function confirmBetAndDeal(G) {
   if (G.phase !== 'preBet') return false;
-  if (G.betAmount <= 0) return false;
 
-  // Clamp bet to current life (safety)
-  G.betAmount = Math.min(G.betAmount, G.life);
-  if (G.betAmount <= 0) return false;
-
-  // Deduct bet from life upfront (held in escrow)
-  G.life = +(G.life - G.betAmount).toFixed(2);
-  G.betHeld = G.betAmount; // track how much was held
+  // No baseBet auto-deduction — player bets manually during the round
+  G.betAmount = 0;
+  G.betHeld   = 0;
 
   // Deduct round start cost
   const startCost = G.roundStartCost;
   G.life = +(G.life - startCost).toFixed(2);
+  if (G.life < 0) G.life = 0;
 
   G.deck        = shuffle(makeDeck());
   G.handCards   = [drawCard(G), drawCard(G)];
@@ -797,45 +804,15 @@ function confirmBetAndDeal(G) {
   G.lastResult  = null;
   G.raiseStep   = 0;
 
-  // v4: Items are now given via selection system, not automatic grants here
-
   computeRoundCost(G);
   addLog(G,`round_start:${G.round}`);
   return true;
 }
 
 // ─────────────────────────────────────────────
-// BETTING (adjust bet during preBet phase)
+// BETTING (adjust bet during preBet phase) — REMOVED
+// No longer needed; baseBet is auto-set on deal
 // ─────────────────────────────────────────────
-function adjustBet(G, mode) {
-  // Only allow bet adjustment during preBet phase (before seeing cards)
-  if (G.phase!=='preBet') return false;
-  const preset  = DIFFICULTY_PRESETS[G.settings.difficulty];
-  const passive = getPassiveEffect(G.passives);
-  const baseBet = +(preset.baseBet+(passive.betBonus||0)).toFixed(2);
-  const maxBet  = +G.life.toFixed(2);
-  // Minimum: at least the smaller of baseBet or remaining life
-  const minBet  = Math.min(baseBet, maxBet);
-  let bet = G.betAmount;
-
-  switch(mode) {
-    case '+1':   bet+=1;   break;
-    case '+5':   bet+=5;   break;
-    case '+10':  bet+=10;  break;
-    case '+100': bet+=100; break;
-    case '-1':   bet-=1;   break;
-    case '-5':   bet-=5;   break;
-    case '-10':  bet-=10;  break;
-    case 'half': bet=+(maxBet/2).toFixed(2); break;
-    case 'allin':bet=maxBet; break;
-    default: return false;
-  }
-  // Clamp: never below minBet, never above maxBet, never 0
-  bet = Math.min(maxBet, Math.max(minBet, +bet.toFixed(2)));
-  if (bet <= 0) return false; // can't bet 0
-  G.betAmount = bet;
-  return true;
-}
 
 // ─────────────────────────────────────────────
 // REVEAL (v5 — auto-settle on last card)
@@ -1013,32 +990,32 @@ function useItem(G, targetIdx=-1) {
 }
 
 // ─────────────────────────────────────────────
-// RAISE BET (v5 — once per reveal step, supports all-in)
+// ADD BET (v6 — player chooses any custom amount)
+// Player can bet any amount at each reveal step.
 // ─────────────────────────────────────────────
-function raiseBet(G, mode = 'raise') {
+function addBet(G, amount) {
   if (G.phase !== 'betting') return { ok: false, reason: 'wrong_phase' };
-  if (G.raiseStep >= G.revealedCount - 1) return { ok: false, reason: 'no_raise_available' };
   if (G.revealedCount >= 5) return { ok: false, reason: 'last_card' };
 
-  let raiseAmount;
-  if (mode === 'allin') {
-    raiseAmount = +G.life.toFixed(2);
+  // Handle all-in
+  if (amount === 'allin' || amount >= G.life) {
+    amount = +G.life.toFixed(2);
   } else {
-    raiseAmount = +(G.betHeld * 0.25).toFixed(2);
+    amount = +(+amount).toFixed(2);
   }
 
-  if (raiseAmount <= 0) return { ok: false, reason: 'too_small' };
-  if (G.life < raiseAmount) raiseAmount = +G.life.toFixed(2); // clamp
+  if (amount <= 0) return { ok: false, reason: 'too_small' };
+  if (G.life < amount) amount = +G.life.toFixed(2); // clamp
 
-  G.life = +(G.life - raiseAmount).toFixed(2);
-  G.betAmount = +(G.betAmount + raiseAmount).toFixed(2);
-  G.betHeld = +(G.betHeld + raiseAmount).toFixed(2);
+  G.life = +(G.life - amount).toFixed(2);
+  G.betAmount = +(G.betAmount + amount).toFixed(2);
+  G.betHeld = +(G.betHeld + amount).toFixed(2);
   G.raiseStep++;
   computeRoundCost(G);
-  addLog(G, `raise:${raiseAmount}`);
+  addLog(G, `bet_add:${amount}`);
 
   const isAllIn = G.life <= 0;
-  return { ok: true, raiseAmount, newBetHeld: G.betHeld, newLife: G.life, isAllIn };
+  return { ok: true, betAmount: amount, newBetHeld: G.betHeld, newLife: G.life, isAllIn };
 }
 
 // ─────────────────────────────────────────────
@@ -1046,7 +1023,7 @@ function raiseBet(G, mode = 'raise') {
 // ─────────────────────────────────────────────
 function skipRound(G) {
   if (G.phase !== 'preBet') return { ok: false, reason: 'wrong_phase' };
-  const preset = DIFFICULTY_PRESETS[G.settings.difficulty];
+  const preset = getPreset(G.settings.difficulty);
   const passive = getPassiveEffect(G.passives);
   const lifeScale = 1 + (G.life / preset.startLife - 1) * preset.lifeDrainRate;
   let drain = preset.baseDrain * lifeScale;
@@ -1100,10 +1077,10 @@ function computeScore(G) {
 // EXPORT
 // ─────────────────────────────────────────────
 const VidaGame = {
-  DIFFICULTY_PRESETS, PASSIVE_DEFS, ITEM_DEFS, HAND_MULTS, HAND_RARITY,
+  DIFFICULTY_PRESETS, getPreset, PASSIVE_DEFS, ITEM_DEFS, HAND_MULTS, HAND_RARITY,
   SUIT_SYMBOLS, SUIT_ORDER, SUIT_PER_CARD, RANKS, RANK_VAL, BLACK_SUITS, RED_SUITS,
   initGame, initInfinityGame, enterPreBet, confirmBetAndDeal, revealNext, placeBet, fold, advanceRound,
-  adjustBet, raiseBet, skipRound, useItem, useExtraItem, getItemTargets, isGameOver,
+  addBet, skipRound, useItem, useExtraItem, getItemTargets, isGameOver,
   computeReturn, computeRoundCost, computeScore, getBestHand, getAllCards,
   getPassiveEffect, getSuitBonus, getRankBonus,
   getHandName, getPassiveDef, getItemDef,
